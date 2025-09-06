@@ -1,0 +1,2200 @@
+package com.honeywell.coreptdu.datatypes.contrlairspacecomm.serviceimpl;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import org.hibernate.NonUniqueObjectException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.context.annotation.RequestScope;
+
+
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.block.ControlBlock;
+
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.block.Webutil;
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.dto.request.ContrlAirspaceCommTriggerRequestDto;
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.dto.response.ContrlAirspaceCommTriggerResponseDto;
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.entity.PlStdContrlAirspaceCommMr;
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.entity.StdContrlAirspaceComm;
+import com.honeywell.coreptdu.datatypes.contrlairspacecomm.service.IContrlAirspaceCommTriggerService;
+import com.honeywell.coreptdu.datatypes.coreptmenummb.serviceimpl.CoreptMenuMmbServiceImpl;
+import com.honeywell.coreptdu.datatypes.corepttemplate.block.DisplayItemBlock;
+import com.honeywell.coreptdu.datatypes.corepttemplate.serviceimpl.CoreptTemplateTriggerServiceImpl;
+import com.honeywell.coreptdu.datatypes.exportdestination.block.SelectOptions;
+import com.honeywell.coreptdu.datatypes.exportdestination.dto.request.ExportDestinationTriggerRequestDto;
+import com.honeywell.coreptdu.datatypes.exportdestination.dto.response.ExportDestinationTriggerResponseDto;
+import com.honeywell.coreptdu.exception.AlertException;
+import com.honeywell.coreptdu.exception.ExceptionUtils;
+import com.honeywell.coreptdu.exception.FormTriggerFailureException;
+import com.honeywell.coreptdu.global.dbtype.PlStdContrlAirspaceCommType;
+import com.honeywell.coreptdu.global.dto.BaseResponse;
+import com.honeywell.coreptdu.global.dto.DuParameter;
+import com.honeywell.coreptdu.global.dto.Global;
+import com.honeywell.coreptdu.global.dto.ReportDetail;
+import com.honeywell.coreptdu.global.dto.ResponseDto;
+import com.honeywell.coreptdu.global.dto.SystemDto;
+import com.honeywell.coreptdu.global.forms.AlertDetail;
+import com.honeywell.coreptdu.global.forms.BlockDetail;
+import com.honeywell.coreptdu.global.forms.DbConstants;
+import com.honeywell.coreptdu.global.forms.DuEvent;
+import com.honeywell.coreptdu.global.forms.FormConstant;
+import com.honeywell.coreptdu.global.forms.WindowDetail;
+import com.honeywell.coreptdu.pkg.spec.IDisplayAlert;
+import com.honeywell.coreptdu.pkg.spec.IRefreshMasterLibrary;
+import com.honeywell.coreptdu.pll.CoreptLib;
+import com.honeywell.coreptdu.utils.common.CustomInteger;
+import com.honeywell.coreptdu.utils.common.DuConstants;
+import com.honeywell.coreptdu.utils.common.HashUtils;
+import com.honeywell.coreptdu.utils.dbutils.GenericNativeQueryHelper;
+import com.honeywell.coreptdu.utils.dbutils.IApplication;
+import com.honeywell.coreptdu.utils.dbutils.ProcedureInParameter;
+import com.honeywell.coreptdu.utils.dbutils.ProcedureOutParameter;
+import com.honeywell.coreptdu.utils.oracleutils.DuBlock;
+import com.honeywell.coreptdu.utils.oracleutils.DuRecord;
+import com.honeywell.coreptdu.utils.oracleutils.GenericTemplateForm;
+import com.honeywell.coreptdu.utils.oracleutils.HoneyWellUtils;
+import com.honeywell.coreptdu.utils.oracleutils.OracleHelpers;
+import com.honeywell.coreptdu.utils.oracleutils.PropertyHelpers;
+
+import com.honeywell.coreptdu.utils.oracleutils.RecordGroup;
+
+import jakarta.persistence.EntityExistsException;
+import jakarta.validation.ConstraintViolationException;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import oracle.jdbc.OracleTypes;
+
+@Slf4j
+@Service
+@RequestScope
+public class ContrlAirspaceCommTriggerServiceImpl extends GenericTemplateForm<ContrlAirspaceCommTriggerServiceImpl>
+		implements IContrlAirspaceCommTriggerService {
+
+	@Getter
+	@Setter
+	private Webutil webutil = new Webutil();
+	@Getter
+	@Setter
+	private ControlBlock controlBlock = new ControlBlock();
+	@Getter
+	@Setter
+	private DuBlock<PlStdContrlAirspaceCommMr> plStdContrlAirspaceCommMr = new DuBlock<>();
+	@Getter
+	@Setter
+	private DuBlock<StdContrlAirspaceComm> stdContrlAirspaceComm = new DuBlock<>();
+	@Getter
+	@Setter
+	private DisplayItemBlock displayItemBlock = new DisplayItemBlock();
+	@Getter
+	@Setter
+	private Global global = new Global();
+	@Getter
+	@Setter
+	private SystemDto system = new SystemDto();
+	@Getter
+	@Setter
+	private DuParameter parameter = new DuParameter();
+	@Getter
+	@Setter
+	private List<DuEvent> event = new ArrayList<>();
+	@Getter
+	@Setter
+	private HashMap<String, RecordGroup> groups = new HashMap<>();
+	@Autowired
+	private IDisplayAlert displayAlert;
+	@Getter
+	@Setter
+	private SelectOptions selectOptions = new SelectOptions();
+	@Autowired
+	private HashUtils hashUtils;
+	@Autowired
+	private IApplication app;
+	@Autowired
+	private CoreptLib coreptLib;
+	@Autowired
+	private CoreptTemplateTriggerServiceImpl coreptTemplateTriggerService;
+
+	@Autowired
+	private IRefreshMasterLibrary refreshMasterLib;
+	@Getter
+	@Setter
+	private AlertDetail alertDetails;
+	@Autowired
+	private GenericNativeQueryHelper genericNativeQueryHelper;
+	@Autowired
+	private CoreptMenuMmbServiceImpl coreptMenuMmbServiceImpl;
+	@Getter
+	@Setter
+	private List<String> blocksOrder = new ArrayList<>();
+	@Getter
+	@Setter
+	private Map<String, WindowDetail> windows = new HashMap<>();
+
+	@Override
+	public void checkToCommit(String pActionType, ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info("checkToCommit Executing");
+
+		
+		try {
+			Integer vButton = 0;
+			Integer totalRows = 0;
+			String vButtonText = null;
+			Integer msgnum = 0;
+
+			if (Objects.equals(system.getFormStatus(), FormConstant. CHANGED)) {
+				if (Objects.equals(pActionType, "COMMIT")) {
+					vButtonText = "Cancel";
+
+				}
+
+				else if (Objects.equals(pActionType, "EXIT")) {
+					vButtonText = "Exit Without Save";
+
+				}
+
+				else {
+					vButtonText = "Cancel Modification";
+
+				}
+				if (Objects.equals(global.getLibRefreshed(), Y)) {
+					alertDetails.getCurrent();
+					if (alertDetails.getAlerts().size() < alertDetails.getCurrentAlert()) {
+						vButton = displayAlert.moreButtons(S, "Refresh Record",
+								"You have modified record(s). Select an option:" + "\n" + "\n"
+										+ "1. Save and refresh Master Library" + "\n"
+										+ "2. Cancel modification, NO Save, NO Refresh" + "\n",
+								"Save&Refresh", vButtonText, "");
+						alertDetails.createNewRecord("checkToCommit1");
+						throw new AlertException(event, alertDetails);
+					} else {
+						vButton = alertDetails.getAlertValue("checkToCommit1", alertDetails.getCurrentAlert());
+					}
+					if (Integer.valueOf(1).equals(vButton)) {
+
+						Integer ind = system.getCursorRecordIndex();
+						validateBeforeCommit(reqDto);
+						system.setCursorRecordIndex(ind);
+						commitForm(this);
+						sendUpdatedRowIdDetails();
+						system.setFormStatus(FormConstant.QUERIED);
+						parameter.setUpdRec(N);
+						setBlockProperty(nameIn(this, "system.Cursor_Block", String.class), FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						message("Record has been saved successfully");
+						system.setFormStatus("NORMAL");
+						totalRows = getGroupRowCount(findGroup("refreshRecordsGroup"));
+						if (totalRows > 0) {
+							refreshMasterLib.refreshRecords(totalRows);
+						}
+
+						if ((Objects.equals(msgnum, 40400))) {
+							clearMessage();
+						}
+
+					}
+				}
+
+				else {
+					if (Objects.equals(pActionType, "COMMIT")) {
+						vButton = 1;
+
+					}
+
+					else {
+						alertDetails.getCurrent();
+						if (alertDetails.getAlerts().size() < alertDetails.getCurrentAlert()) {
+							vButton = displayAlert.moreButtons(S, "Refresh Record",
+									"Record is modified or inserted or deleted. Select an option:  " + "\n", "Save",
+									vButtonText, "");
+							alertDetails.createNewRecord("alertid");
+							throw new AlertException(event, alertDetails);
+						} else {
+							vButton = alertDetails.getAlertValue("alertid", alertDetails.getCurrentAlert());
+						}
+					}
+					if (Objects.equals(vButton, 1)) {
+						Integer ind = system.getCursorRecordIndex();
+						validateBeforeCommit(reqDto);
+						system.setCursorRecordIndex(ind);
+						commitForm(this);
+						system.setFormStatus(FormConstant.QUERIED);
+						parameter.setUpdRec(N);
+						setBlockProperty(nameIn(this, "system.Cursor_Block", String.class), FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						message("Record has been saved successfully");
+						system.setFormStatus("NORMAL");
+						if ((Objects.equals(msgnum, 40400))) {
+							clearMessage();
+						}
+					} else {
+
+						exitForm();
+
+					}
+
+				}
+				if ((Objects.equals(global.getLibRefreshed(), Y) && Objects.equals(vButton, 2))
+						|| (!Objects.equals(global.getLibRefreshed(), Y) && Objects.equals(vButton, 1))) {
+					if (Objects.equals(pActionType, "COMMIT")) {
+						log.debug("pActionType is Commit");
+					} else if (Objects.equals(pActionType, "EXIT")) {
+
+						setApplicationProperty("cursor_style", "cursor_style");
+
+						exitForm();
+
+					}
+
+					else {
+
+						clearBlock("noCommit", " ");
+
+					}
+
+				}
+
+				else {
+					if (Objects.equals(system.getFormStatus(), FormConstant. CHANGED)) {
+						throw new FormTriggerFailureException();
+
+					} else if (Objects.equals(pActionType, "EXIT")) {
+
+						setApplicationProperty("cursorStyle", "default");
+						exitForm();
+					}
+
+				}
+
+			}
+
+			else {
+
+				refreshMasterLib.ifRefresh();
+				if (pActionType.equals("EXIT")) {
+					exitForm();
+				}
+
+			}
+
+			log.info("checkToCommit Executed Successfully");
+		} catch (Exception e) {
+			if (e instanceof DataIntegrityViolationException || e instanceof NonUniqueObjectException
+					|| e instanceof EntityExistsException || e instanceof ConstraintViolationException
+					|| e instanceof org.hibernate.exception.ConstraintViolationException) {
+				coreptLib.dspMsg("ORACLE error: unable to INSERT record. \n \n Please check the exact "
+						+ "error message from the \"Display \n Error\" in the \"HELP\" menu");
+				log.info(" Unique Constrain Error while Executing the keyCommit Service");
+				throw new FormTriggerFailureException(e.getMessage());
+			}
+
+			log.error("Error while executing checkToCommit{}", e.getMessage());
+			throw e;
+
+		}
+	}
+
+
+	@Override
+	public void doValidate(String pBlock, String pIgnoreRef) throws Exception {
+		log.info("doValidate Executing");
+	
+		try {
+			PlStdContrlAirspaceCommType vSrec ;
+			
+			String vAllErr = null;
+			String vNerr = null;
+			String vClass = null;
+			String vInd = Y;
+
+			if (!Objects.equals(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirspaceType(),
+					null)) {
+				controlBlock.setStdOverrideErrors(null);
+				vClass = plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationClass();
+				if (!Arrays.asList("E", "A").contains(vClass)) {
+					if (!coreptLib.isOverride(
+							global.getDataSupplier(), toInteger(plStdContrlAirspaceCommMr
+									.getRow(system.getCursorRecordIndex()).getProcessingCycle()),
+							"CONTRL_AIRSPACE_COMM", 979)) {
+						vAllErr = "* 979 - " + coreptLib.getErrText(979);
+
+						vInd = I;
+
+					}
+
+					else {
+						if (!Objects.equals(vInd, I)) {
+							vInd = O;
+
+						}
+
+					}
+					if ((Objects.equals(
+							rtrim(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()),
+							null)
+							&& Objects.equals(rtrim(
+									plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent()),
+									null))
+							|| (!Objects.equals(rtrim(
+									plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()),
+									null)
+									&& !Objects.equals(rtrim(plStdContrlAirspaceCommMr
+											.getRow(system.getCursorRecordIndex()).getFirUirIdent()), null))) {
+						if (!coreptLib.isOverride(
+								global.getDataSupplier(), toInteger(plStdContrlAirspaceCommMr
+										.getRow(system.getCursorRecordIndex()).getProcessingCycle()),
+								"CONTRL_AIRSPACE_COMM", 980)) {
+							vAllErr = getNullClean(vAllErr) + " * 980 - " + coreptLib.getErrText(980);
+							vInd = I;
+
+						}
+
+						else {
+							if (!Objects.equals(vInd, I)) {
+								vInd = O;
+
+							}
+
+						}
+
+					}
+
+				}
+
+				else if (Objects.equals(vClass, "A") && (Objects.equals(
+						rtrim(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()), null)
+						|| !Objects.equals(
+								rtrim(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent()),
+								null))) {
+					if (!coreptLib.isOverride(
+							global.getDataSupplier(), toInteger(plStdContrlAirspaceCommMr
+									.getRow(system.getCursorRecordIndex()).getProcessingCycle()),
+							"CONTRL_AIRSPACE_COMM", 981)) {
+						vAllErr = "* 981 - " + coreptLib.getErrText(981);
+						vInd = I;
+
+					}
+
+					else {
+						if (!Objects.equals(vInd, I)) {
+							vInd = O;
+
+						}
+
+					}
+
+				}
+
+				else if (Objects.equals(vClass, "E") && (!Objects.equals(
+						rtrim(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()), null)
+						|| Objects.equals(
+								rtrim(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent()),
+								null))) {
+					if (!coreptLib.isOverride(
+							global.getDataSupplier(), toInteger(plStdContrlAirspaceCommMr
+									.getRow(system.getCursorRecordIndex()).getProcessingCycle()),
+							"CONTRL_AIRSPACE_COMM", 982)) {
+						vAllErr = "* 982 - " + coreptLib.getErrText(982);
+						vInd = I;
+
+					}
+
+					else {
+						if (!Objects.equals(vInd, I)) {
+							vInd = O;
+
+						}
+
+					}
+
+				}
+
+				Map<String, Object> populateRelRecordCall = populateRelRecord(pBlock);
+				vSrec = (PlStdContrlAirspaceCommType) populateRelRecordCall.get("pSrec");
+				Map<String, Object> dbCalls = app.executeProcedure("CPTS", "vcontrl_airspace_comm",
+						"RECRV3_WRAPPER",
+						new ProcedureInParameter("p_record_type", S, OracleTypes.VARCHAR),
+						new ProcedureInParameter("p_srec", vSrec, OracleTypes.STRUCT,
+								"RECRV3_WRAPPER.PL_STD_CONTRL_AIRSPACE_COMM_TYPE"),
+						new ProcedureOutParameter("p_err", OracleTypes.VARCHAR),
+						new ProcedureOutParameter("p_valind", OracleTypes.VARCHAR),
+						new ProcedureInParameter("p_view_only", pIgnoreRef, OracleTypes.VARCHAR));
+				vNerr = toString(dbCalls.get("p_err"));
+				if (!Objects.equals(vNerr, "YYY")) {
+					if (Objects.equals(substr(vNerr, 1, 1), N)) {
+						vAllErr = getNullClean(vAllErr) + " * 461 - " + coreptLib.getErrText(461);
+
+					}
+
+					if (Objects.equals(substr(vNerr, 2, 1), N)) {
+						vAllErr = getNullClean(vAllErr) + " * 462 - " + coreptLib.getErrText(462);
+
+					}
+
+					if (Objects.equals(substr(vNerr, 3, 1), N)) {
+						vAllErr = getNullClean(vAllErr) + " * 463 - " + coreptLib.getErrText(463);
+
+					}
+
+				}
+
+				coreptLib.setindandmessage(pBlock, vAllErr, parameter.getWorkType(), pIgnoreRef, vInd);
+				if (Objects.equals(pIgnoreRef, N)) {
+
+					setUpdateDcr();
+
+				}
+
+				coreptLib.setoverridebutton(pBlock);
+
+			}
+
+			else {
+coreptLib.setinitialerrordisplay(pBlock);
+
+			}
+
+			log.info("doValidate Executed Successfully");
+		} catch (Exception e) {
+			log.error("Error while executing doValidate{}", e.getMessage());
+			throw e;
+
+		}
+	}
+
+
+
+	@Override
+	public Map<String, Object> populateRelRecord(String pBlock) throws Exception {
+		log.info("populateRelRecord Executing");
+		Map<String, Object> result = new HashMap<>();
+		PlStdContrlAirspaceCommType pSrec = new PlStdContrlAirspaceCommType();
+		try {
+
+			if (Objects.equals(upper(pBlock), DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR)) {
+				pSrec.setCenterIcaoCode(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCenterIcaoCode());
+				pSrec.setMultCode(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getMultCode());
+				pSrec.setAirspaceClassification(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirspaceClassification());
+				pSrec.setAirportIcao(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIcao());
+				pSrec.setAirportIdent(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent());
+				pSrec.setFirUirAddress(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirAddress());
+				pSrec.setFirUirIdent(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent());
+				pSrec.setFirUirInd(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirInd());
+				pSrec.setAirspaceCenter(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirspaceCenter());
+				pSrec.setAirspaceType(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirspaceType());
+				pSrec.setRemoteName(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName());
+				pSrec.setCommunicationType(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationType());
+				pSrec.setFreqUnits(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits());
+
+				pSrec.setCommunicationFreq(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.getCommunicationFreq()!=null ?  plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.getCommunicationFreq().getDoubleValue():null);
+				pSrec.setValidateInd(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getValidateInd());
+				if (toInteger(global.getRecentCycle()) >= toInteger(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle())) {
+					pSrec.setProcessingCycle(toInteger(
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle()));
+
+				}
+
+				else {
+					pSrec.setProcessingCycle(toInteger(global.getRecentCycle()));
+
+				}
+				pSrec.setDataSupplier(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getDataSupplier());
+				pSrec.setCreateDcrNumber(toInteger(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCreateDcrNumber()));
+
+			}
+			result.put("pSrec", pSrec);
+
+			log.info("populateRelRecord Executed Successfully");
+			return result;
+		} catch (Exception e) {
+			log.error("Error while executing populateRelRecord{}", e.getMessage());
+			throw e;
+
+		}
+	}
+
+	@Override
+	public void setUpdateDcr() throws Exception {
+		log.info("setUpdateDcr Executing");
+		String query = "";
+		try {
+			PlStdContrlAirspaceCommType rstdContrlAirspaceComm;
+			Integer vDcr = toInteger(
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCreateDcrNumber());
+			Integer vCount = 0;
+
+			query = "select * from pl_std_heli_path_point where create_dcr_number = ?";
+			List<DuRecord> rstdApproachs = app.executeQuery(query, vDcr);
+
+			for (DuRecord rstdHeliPathPoints : rstdApproachs) {
+				rstdContrlAirspaceComm = app.mapResultSetToClass(rstdHeliPathPoints, PlStdContrlAirspaceCommType.class);
+
+				vCount = vCount + 1;
+				if (!Objects.equals(
+						nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationType(),
+								" "),
+						nvl(rstdContrlAirspaceComm.getCommunicationType(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+										.getCommunicationClass(), " "),
+								nvl(rstdContrlAirspaceComm.getCommunicationClass(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+										.getCommunicationFreq(), 0),
+								nvl(rstdContrlAirspaceComm.getCommunicationFreq(), 0))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getFreqUnits(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getRemoteName(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getFirUirIdent(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirAddress(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getFirUirAddress(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirInd(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getFirUirInd(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getAirportIdent(), " "))
+						|| !Objects.equals(
+								nvl(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIcao(),
+										" "),
+								nvl(rstdContrlAirspaceComm.getAirportIcao(), " "))) {
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+							.setUpdateDcrNumber(new CustomInteger(global.getDcrNumber()));
+
+				}
+
+			}
+			if (Objects.equals(vCount, 0)) {
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.setUpdateDcrNumber(new CustomInteger(global.getDcrNumber()));
+
+			}
+
+			log.info("setUpdateDcr Executed Successfully");
+		} catch (Exception e) {
+			log.error("Error while executing setUpdateDcr{}", e.getMessage());
+			throw e;
+
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> onError(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" onError Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			Integer msgnum = global.getErrorCode();
+			String msgtxt = global.getErrorText();
+			String msgtyp = global.getErrorType();
+			String vBlockName = system.getCursorBlock();
+
+			if ((Objects.equals(msgnum, 40400) || Objects.equals(msgnum, 40406) || Objects.equals(msgnum, 40407))) {
+				message("Changes saved successfully");
+
+			}
+
+			else if (Arrays.asList(41051, 40350, 47316, 40353).contains(msgnum)) {
+				log.debug("msgnum value is {}", msgnum);
+			}
+
+			else if (Objects.equals(msgnum, 41050) && Objects.equals(parameter.getWorkType(), "VIEW")) {
+				log.debug("WorkType is View");
+			}
+
+			else if (Arrays.asList(40401, 40405).contains(msgnum)) {
+				log.debug(" value of msgnum {}", msgnum);
+			}
+
+			else if (Objects.equals(msgnum, 40100)) {
+
+				clearMessage();
+
+				message("at the first record.");
+
+			}
+
+			else if (Objects.equals(msgnum, 40735) && like("%01031%", msgtxt)) {
+
+				clearMessage();
+				coreptLib.dspMsg(msgtxt + " Insufficient privileges. ");
+
+			}
+
+			else if (Arrays.asList(40508, 40509).contains(msgnum)) {
+
+				coreptLib.dspMsg(msgtxt
+						+ "Please check the exact error\n    message from the \"Display Error\" in the \"HELP\" menu");
+
+			}
+
+			else if (Integer.valueOf(40200).equals(msgnum)) {
+				if (Objects.equals(parameter.getUpdRec(), Y)) {
+					if (!Objects.equals(parameter.getWorkType(), "VIEW")) {
+
+						coreptLib.dspActionMsg("U", parameter.getRecordType(),
+								toInteger(nameIn(this, "global.dcr_number")),
+								toInteger(nvl(nameIn(this, vBlockName + ".processing_cycle"),
+										global.getProcessingCycle())),
+								"");
+
+					}
+
+					else {
+
+						coreptLib.dspMsg(msgtxt);
+						throw new FormTriggerFailureException();
+
+					}
+
+				}
+
+				else {
+
+					coreptLib.dspMsg(msgtxt);
+					throw new FormTriggerFailureException();
+
+				}
+
+			}
+
+			else if (Objects.equals(msgnum, 41050) && !Objects.equals(parameter.getWorkType(), "VIEW")) {
+				if (Objects.equals(parameter.getUpdRec(), Y)) {
+					log.debug("UpdRec value is Y");
+				}
+
+				else {
+
+					coreptLib.dspMsg(msgtxt);
+					throw new FormTriggerFailureException();
+
+				}
+
+			}
+
+			else {
+
+				displayAlert.oneButton(S, "Error", msgtyp + "-" + toChar(msgnum) + ": " + msgtxt);
+
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" onError executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the onError Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> whenNewBlockInstance(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" whenNewBlockInstance Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			coreptTemplateTriggerService.whenNewBlockInstance();
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" whenNewBlockInstance executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the whenNewBlockInstance Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> onMessage(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" onMessage Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" onMessage executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the onMessage Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyExeQry(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyExeQry Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			if (Objects.equals(system.getMode(), "NORMAL") && !Objects.equals(parameter.getWorkType(), "VIEW")) {
+
+				checkToCommit("EXECUTE_QUERY", reqDto);
+				system.setFormStatus("NORMAL");
+
+			}
+			if (Objects.equals(system.getMode(), "NORMAL")) {
+				system.setCursorRecordIndex(0);
+				if (Objects.equals(toSnakeCase(system.getCursorBlock()), DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR)) {
+					plStdContrlAirspaceCommMr.getData().add(0, new PlStdContrlAirspaceCommMr());
+					plStdContrlAirspaceCommMrPreQuery(reqDto);
+
+				} else if (Objects.equals(toSnakeCase(system.getCursorBlock()), DbConstants.STD_CONTRL_AIRSPACE_COMM)) {
+					stdContrlAirspaceComm.getData().add(0, new StdContrlAirspaceComm());
+					stdContrlAirspaceCommPreQuery(reqDto);
+				}
+			} else {
+				system.setCursorRecordIndex(0);
+				if (Objects.equals(toSnakeCase(system.getCursorBlock()), DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR)) {
+					plStdContrlAirspaceCommMrPreQuery(reqDto);
+
+				} else if (Objects.equals(toSnakeCase(system.getCursorBlock()),  DbConstants.STD_CONTRL_AIRSPACE_COMM)) {
+					stdContrlAirspaceCommPreQuery(reqDto);
+				}
+			}
+
+			coreptLib.coreptexecutequery(this);
+			system.setMode("NORMAL");
+			global.setNewDcrNo("");
+			if (!system.getFormStatus().equals("NEW")) {
+				global.setCreateDcrNumber(toString(
+						nameIn(this, HoneyWellUtils.toCamelCase(system.getCursorBlock()) + ".createDcrNumber")));
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyExeqry executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			if (e instanceof FormTriggerFailureException) {
+				if (Objects.equals(upper(system.getCursorBlock()), DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR)
+						&& toInteger(plStdContrlAirspaceCommMr.getQueryHits()) >= 1) {
+					plStdContrlAirspaceCommMr.getRow(0).setProcessingCycle(null);
+					plStdContrlAirspaceCommMr.getRow(0).setDataSupplier(null);
+				} else if (Objects.equals(upper(system.getCursorBlock()),  DbConstants.STD_CONTRL_AIRSPACE_COMM)
+						&& toInteger(stdContrlAirspaceComm.getQueryHits()) >= 1) {
+					stdContrlAirspaceComm.getRow(0).setDataSupplier(null);
+				} else if (nameIn(this, system.getCursorBlock() + ".QUERY_WHERE") != null) {
+					if (nameIn(this, system.getCursorBlock() + ".PROCESSING_CYCLE") != null) {
+						copy(this, null, system.getCursorBlock() + ".PROCESSING_CYCLE");
+					}
+				}
+			}
+			log.error("Error while Executing the keyExeqry Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyEdit(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyEdit Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			coreptTemplateTriggerService.keyEdit();
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyEdit executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the keyEdit Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyExit(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyExit Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(system.getMode(), "NORMAL") && !Objects.equals(parameter.getWorkType(), "VIEW")) {
+
+				checkToCommit("EXIT", reqDto);
+
+			} else {
+				exitForm();
+			}
+
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyExit executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the keyExit Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyEntqry(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyEntQry Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			DuEvent e = new DuEvent();
+			e.setName("test");
+			reqDto.getEvent().add(e);
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(system.getMode(), "NORMAL") && !Objects.equals(parameter.getWorkType(), "VIEW")) {
+
+				checkToCommit("ENTER_QUERY", reqDto);
+
+			}
+			global.setNewDcrNo("");
+
+			coreptLib.coreptenterquery();
+			system.setMode("ENTER_QUERY");
+			system.setFormStatus("NORMAL");
+
+		
+			if (Objects.equals(system.getMode(), "NORMAL")) {
+
+				coreptLib.unsetQueryMenuItems();
+
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyEntqry executed successfully");
+
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+
+		} catch (Exception e) {
+			log.error("Error while Executing the keyEntqry Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> whenNewFormInstance(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" whenNewFormInstance Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			coreptTemplateTriggerService.initializeForm();
+			displayItemBlock.setFormName(system.getCurrentForm().replace("_", " "));
+
+			coreptLib.setBlock();
+
+			coreptLib.iffromerrorsummary();
+			String queryHits = toString(plStdContrlAirspaceCommMr.getQueryHits());
+			OracleHelpers.ResponseMapper(this, reqDto);
+			whenNewRecordInstance(reqDto);
+			plStdContrlAirspaceCommMr.setQueryHits(queryHits);
+			if (!system.getFormStatus().equals("NEW")) {
+				global.setCreateDcrNumber(toString(
+						nameIn(this, HoneyWellUtils.toCamelCase(system.getCursorBlock()) + ".createDcrNumber")));
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" whenNewFormInstance executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the whenNewFormInstance Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyCreRec(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyCreRec Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			coreptTemplateTriggerService.keyCrerec();
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyCreRec executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the keyCreRec Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyCommit(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyCommit Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			if (global.getClearBlock() != null && global.getClearBlock()) {
+				validateBeforeCommit(reqDto);
+				commitForm(this);
+				sendUpdatedRowIdDetails();
+				global.setClearBlock(false);
+				system.setFormStatus("NORMAL");
+
+			} else {
+				if (Objects.equals(parameter.getWorkType(), "VIEW")) {
+					log.debug("WorkType value is View");
+
+				}
+
+				else {
+
+					checkToCommit("COMMIT", reqDto);
+
+				}
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" keyCommit executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the keyCommit Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> whenNewRecordInstance(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" whenNewRecordInstance Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			String pBlock = toSnakeCase(system.getCursorBlock());
+			Integer vAllowUpdate = 0;
+
+			if (like(PL_UNDERSCORE_PATTERN, pBlock)) {
+				if (Objects.equals(system.getMode(), "NORMAL")
+						&& !Objects.equals(nvl(nameIn(this, pBlock + ".validate_ind"), N), Y)
+						&& !Objects.equals(nameIn(this, pBlock + ".processing_cycle"), null)) {
+
+					doValidate(pBlock, "");
+
+				}
+
+				else {
+
+					coreptLib.setinitialerrordisplay(pBlock);
+
+				}
+				if (!Objects.equals(parameter.getWorkType(), "VIEW")
+						&& Objects.equals(parameter.getRecordType(), T)) {
+					if (Objects.equals(nameIn(this, pBlock + ".generated_in_house_flag"), N)) {
+						setBlockItemProperty(pBlock + ".processing_cycle", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						setBlockItemProperty(pBlock + ".generated_in_house_flag", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						setBlockItemProperty(pBlock + ".validate_ind", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						if (!like(PATTERN_MR, pBlock)) {
+							setItemProperty(pBlock + ".processing_cycle", "current_record_attribute", "Not_updatable");
+							setItemProperty(pBlock + ".generated_in_house_flag", "current_record_attribute",
+									"Not_updatable");
+							setItemProperty(pBlock + ".validate_ind", "current_record_attribute", "default");
+
+						}
+
+					}
+
+					else {
+						setBlockItemProperty(pBlock + ".generated_in_house_flag", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						setBlockItemProperty(pBlock + ".validate_ind", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						if (!like(PATTERN_MR, pBlock)) {
+							setItemProperty(pBlock + ".generated_in_house_flag", "current_record_attribute", "default");
+							setItemProperty(pBlock + ".validate_ind", "current_record_attribute", "Not_updatable");
+
+						}
+
+						if (Objects.equals(global.getLibRefreshed(), Y)
+								&& Objects.equals(nameIn(this, pBlock + ".generated_in_house_flag"), Y)) {
+							setBlockItemProperty(pBlock + ".processing_cycle", FormConstant.UPDATE_ALLOWED,
+									FormConstant.PROPERTY_FALSE);
+							if (!like(PATTERN_MR, pBlock)) {
+								setItemProperty(pBlock + ".processing_cycle", "current_record_attribute",
+										"Not_updatable");
+
+							}
+
+						}
+
+						else {
+							setBlockItemProperty(pBlock + ".processing_cycle", FormConstant.UPDATE_ALLOWED,
+									FormConstant.PROPERTY_TRUE);
+							if (!like(PATTERN_MR, pBlock)) {
+								setItemProperty(pBlock + ".processing_cycle", "current_record_attribute", "default");
+
+							}
+
+						}
+
+					}
+
+				}
+
+				if (Objects.equals(nameIn(this, pBlock + ".processing_cycle"), null)) {
+
+					vAllowUpdate = coreptLib.checkValidSuppCust(toInteger(global.getProcessingCycle()),
+							toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+							global.getDataSupplier(), parameter.getRecordType(), "");
+				}
+
+				else {
+					
+					vAllowUpdate = coreptLib.checkValidSuppCust(toInteger(nameIn(this, pBlock + ".processing_cycle")),
+							toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+							global.getDataSupplier(), parameter.getRecordType(), "");
+				}
+				if (Objects.equals(vAllowUpdate, 1)) {
+					parameter.setUpdRec(N);
+					setBlockProperty(pBlock, FormConstant.UPDATE_ALLOWED, FormConstant.PROPERTY_TRUE);
+
+				}
+
+				else {
+					parameter.setUpdRec(Y);
+					setBlockProperty(pBlock, FormConstant.UPDATE_ALLOWED, FormConstant.PROPERTY_FALSE);
+					if (!Objects.equals(nameIn(this, pBlock + ".processing_cycle"), global.getProcessingCycle())) {
+						throw new FormTriggerFailureException();
+
+					}
+
+				}
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" whenNewRecordInstance executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the whenNewRecordInstance Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> whenFormNavigate(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" whenFormNavigate Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(system.getFormStatus(), FormConstant. CHANGED)
+					&& Objects.equals(nameIn(this, "global.check_save"), Y)) {
+
+				coreptLib.checkSavePrc("Control Airspace Comm");
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" whenFormNavigate executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the whenFormNavigate Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrPreQuery(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrPreQuery Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (!Objects.equals(global.getFromErrorSummary(), Y)) {
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.setDataSupplier(global.getDataSupplier());
+				if (Objects.equals(displayItemBlock.getAllowBothCycles(), N)) {
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+							.setProcessingCycle(global.getProcessingCycle());
+
+				}
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrPreQuery executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrPreQuery Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrPreInsert(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrPreInsert Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			String vBlockName = HoneyWellUtils.toCamelCase(system.getCursorBlock());
+			Integer vAllowUpdate = 0;
+			String query = null;
+			DuRecord rec = null;
+
+			if (Arrays.asList(FormConstant. CHANGED, FormConstant. INSERT).contains(system.getRecordStatus())) {
+				if (Objects.equals(nameIn(this, vBlockName + ".processing_cycle"), null)) {
+					vAllowUpdate = coreptLib.checkValidSuppCust(toInteger(global.getProcessingCycle()),
+							toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+							global.getDataSupplier(), parameter.getRecordType(), "");
+
+				}
+
+				else {
+					vAllowUpdate = coreptLib.checkValidSuppCust(
+							toInteger(nameIn(this, vBlockName + ".processing_cycle")),
+							toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+							global.getDataSupplier(), parameter.getRecordType(), "");
+
+				}
+
+			}
+
+			if (Objects.equals(vAllowUpdate, 1)) {
+
+				  coreptLib.checkwildcardforkeys(vBlockName);
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.setDataSupplier(global.getDataSupplier());
+
+				query = """
+						select dcr_number_seq.nextval from dual
+						""";
+				rec = app.selectInto(query);
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.setCreateDcrNumber(new CustomInteger(String.valueOf(rec.getInt())));
+
+				doValidate(DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR, N);
+				if (Objects.equals(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationClass(), "E")) {
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).setCommunicationNumber(
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+											.getCommunicationFreq()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+											.getCommunicationType()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirAddress()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirInd());
+
+				}
+
+				else {
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).setCommunicationNumber(
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+											.getCommunicationFreq()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+											.getCommunicationType()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()
+									+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIcao());
+
+				}
+				if (Objects.equals(global.getLibRefreshed(), Y)
+						&& Objects.equals(
+								plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle(),
+								global.getNewProcessingCycle())
+						&& Arrays.asList(Y, S, H, O)
+								.contains(toString(nameIn(this, toSnakeCase(vBlockName) + ".validate_ind")))) {
+
+					refreshMasterLib.setRecordGroup(
+							toInteger(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+									.getCreateDcrNumber()),
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getValidateInd(),
+							DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR, toInteger(plStdContrlAirspaceCommMr
+									.getRow(system.getCursorRecordIndex()).getProcessingCycle()),
+							I);
+
+				}
+
+			}
+
+			else {
+
+				coreptLib.dspActionMsg(I, parameter.getRecordType(), toInteger(nameIn(this, "global.dcr_number")),
+						toInteger(nvl(nameIn(this, vBlockName + ".processing_cycle"), global.getProcessingCycle())),
+						"");
+
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrPreInsert executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			throw e ;
+
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrPreUpdate(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrPreUpdate Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+
+			String vBlockName = DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR;
+			Integer vDcrNumber = toInteger(
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCreateDcrNumber());
+			Integer vProcessingCycle = toInteger(
+					plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle());
+			String vTable = DbConstants.PL_STD_CONTRL_AIRSPACE_COMM;
+			String vValidateIndNew = null;
+			String vValidateIndOld = null;
+
+			vValidateIndOld = app.executeFunction(String.class, DbConstants.SCHEMA_CPTM, "GET_VALIDATE_IND", "REFRESH_ML_UTILITIES",
+					OracleTypes.VARCHAR, new ProcedureInParameter("p_table", vTable, OracleTypes.VARCHAR),
+					new ProcedureInParameter("p_dcr", vDcrNumber, OracleTypes.NUMBER));
+
+			if (Arrays.asList(Y, S, H, O).contains(vValidateIndOld)) {
+
+				refreshMasterLib.deleteFromRefTable(vDcrNumber, 0);
+
+			}
+
+		
+			doValidate(DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR, N);
+			if (Objects.equals(plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationClass(),
+					"E")) {
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).setCommunicationNumber(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationFreq()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationType()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirIdent()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirAddress()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFirUirInd());
+
+			}
+
+			else {
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).setCommunicationNumber(
+						plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getRemoteName()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationFreq()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCommunicationType()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getFreqUnits()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIdent()
+								+ plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getAirportIcao());
+
+			}
+			vValidateIndNew = toString(nameIn(this, vBlockName + ".validate_ind"));
+			if (Arrays.asList(Y, S, H, O).contains(vValidateIndOld)
+					&& Arrays.asList(W, N, I).contains(vValidateIndNew)) {
+				if (Objects.equals(refreshMasterLib.checkReferenceInfo(vBlockName, ""), N)) {
+					throw new FormTriggerFailureException();
+
+				}
+
+			}
+
+			if (Objects.equals(global.getLibRefreshed(), Y)
+					&& Arrays.asList(global.getNewProcessingCycle(), global.getOldProcessingCycle())
+							.contains(toString(vProcessingCycle))) {
+				if (Arrays.asList(Y, S, H, O).contains(vValidateIndNew)
+						|| Arrays.asList(Y, S, H, O).contains(vValidateIndOld)) {
+
+					refreshMasterLib.setRecordGroup(vDcrNumber, vValidateIndNew, vBlockName, vProcessingCycle, "U");
+
+				}
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrPreUpdate executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrPreUpdate Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			throw e;
+
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> keyDuprec(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" keyDuprec Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(parameter.getWorkType(), "VIEW")) {
+				log.debug("keyDuprec WorkType value is VIEW");
+			}
+
+			else {
+				if (!Objects.equals(OracleHelpers.nameInWithIndex(this, system.getCursorBlock() + ".dataSupplier",
+						system.getCursorRecordIndex()), null)) {
+					createRecord("");
+
+				}
+
+				duplicateRecord("", 0);
+				copy(null, system.getCursorBlock() + ".validate_ind");
+				copy(null, system.getCursorBlock() + ".create_dcr_number");
+				copy(null, system.getCursorBlock() + ".update_dcr_number");
+				copy(null, system.getCursorBlock() + ".processing_cycle");
+
+			
+				if (Objects.equals(parameter.getRecordType(), T)) {
+					copy(Y, system.getCursorBlock() + ".generated_in_house_flag");
+
+				}
+
+			}
+
+			log.info(" keyDuprec executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+
+		} catch (Exception e) {
+			log.error("Error while executing keyDuprec{}", e.getMessage());
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrKeyDelrec(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrKeyDelrec Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(parameter.getWorkType(), "VIEW")) {
+				log.debug("plStdContrlAirspaceCommMrKeyDelrec WorkType value is VIEW");
+			}
+
+			else {
+				String vBlockName = system.getCursorBlock();
+				Integer vAllowUpdate = 0;
+
+				if (!Arrays.asList("NEW", FormConstant. INSERT).contains(system.getRecordStatus())) {
+					if (Objects.equals(nameIn(this, vBlockName + ".processing_cycle"), null)) {
+						vAllowUpdate = coreptLib.checkValidSuppCust(toInteger(global.getProcessingCycle()),
+								toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+								global.getDataSupplier(), parameter.getRecordType(), "");
+
+					}
+
+					else {
+						vAllowUpdate = coreptLib.checkValidSuppCust(
+								toInteger(nameIn(this, vBlockName + ".processing_cycle")),
+								toInteger(global.getProcessingCycle()), toInteger(global.getDcrNumber()),
+								global.getDataSupplier(), parameter.getRecordType(), "");
+
+					}
+					if (Objects.equals(vAllowUpdate, 1)) {
+						alertDetails.getCurrent();
+						Integer vButton = 0;
+						if (alertDetails.getAlerts().size() < alertDetails.getCurrentAlert()) {
+							vButton = displayAlert.moreButtons(S, "Delete Record",
+									"You are going to delete this record. Please be sure." + chr(10) + " ", "Delete It",
+									"Cancel", "");
+							alertDetails.createNewRecord("alertid");
+							throw new AlertException(event, alertDetails);
+						} else {
+							vButton = alertDetails.getAlertValue("alertid", alertDetails.getCurrentAlert());
+						}
+						if (Integer.valueOf(1).equals(vButton)) {
+							String pTableType = "M2C";
+							String pTableName = ltrim(upper(getBlockProperty(vBlockName, "Query_Data_Source_Name")),
+									"PL_");
+							Integer vDcrNumber = toInteger(nameIn(this, vBlockName + ".create_dcr_number"));
+							Integer vProcessingCycle = toInteger(nameIn(this, vBlockName + ".processing_cycle"));
+							String vValidateInd = toString(nameIn(this, vBlockName + ".validate_ind"));
+							String vStatus = system.getRecordStatus();
+
+							if (Objects.equals(vStatus, FormConstant. CHANGED)) {
+								vValidateInd = app.executeFunction(String.class, DbConstants.SCHEMA_CPTM, "GET_VALIDATE_IND",
+										"REFRESH_ML_UTILITIES", OracleTypes.VARCHAR,
+										new ProcedureInParameter("p_table",
+												getBlockProperty(vBlockName, "Query_Data_Source_Name"),
+												OracleTypes.VARCHAR),
+										new ProcedureInParameter("p_dcr",
+												toInteger(nameIn(this, vBlockName + ".create_dcr_number")),
+												OracleTypes.NUMBER));
+
+							}
+
+							if (Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+								if (Objects.equals(refreshMasterLib.checkReferenceInfo(vBlockName, D), N)) {
+									throw new FormTriggerFailureException();
+
+								}
+
+							}
+
+							if (Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+
+								refreshMasterLib.deleteFromRefTable(vDcrNumber, 0);
+
+							}
+
+							if (Objects.equals(global.getLibRefreshed(), Y)
+									&& Arrays.asList(global.getNewProcessingCycle(), global.getOldProcessingCycle())
+											.contains(toString(vProcessingCycle))
+									&& Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+
+				
+								refreshMasterLib.refreshARecord(pTableType, vDcrNumber, vProcessingCycle, pTableName,
+										I, null);
+								system.setFormStatus("NORMAL");
+								system.setRecordStatus("DELETED");
+								copy("DELETED", vBlockName + ".record_status");
+								validateBeforeCommit(reqDto);
+								try {
+									commitForm(this);
+									sendUpdatedRowIdDetails();
+								} catch (Exception e) {
+									throw e;
+								}
+								message("Records have been successfully ");
+								resetRecordStatus();
+								refreshMasterLib.setRecordGroup(vDcrNumber, I, toSnakeCase(vBlockName),
+										vProcessingCycle, D);
+								PropertyHelpers.setAlertProperty(event, "dsp_msg", "note", "Forms",
+										"The refresh master library table for this deletion is done" + "\n"
+												+ "and all changes are commited.",
+										"ALERT_MESSAGE_TEXT", "OK", null, null);
+								PropertyHelpers.setShowAlert(event, "dsp_msg", false);
+								deleteRecord("");
+
+							}
+
+							else {
+								deleteRecord(system.getCursorBlock());
+								copy("DELETED", vBlockName + ".record_status");
+								String _rowId = toString(nameIn(this, vBlockName + ".rowid"));
+								sendLockRowIdDetails(_rowId);
+								system.setRecordStatus(FormConstant. CHANGED);
+								system.setFormStatus(FormConstant. CHANGED);
+
+							}
+							if (Arrays.asList(Y, S, H, O)
+									.contains(nameIn(this, system.getCursorBlock() + ".validate_ind"))) {
+								refreshMasterLib.deleteFromRefTable(
+										toInteger(nameIn(this, system.getCursorBlock() + ".create_dcr_number")), 0);
+
+							}
+
+						}
+						 else if(Objects.equals(vButton, 2)) {
+								throw new FormTriggerFailureException();
+							}
+
+					}
+
+					else {
+
+						coreptLib.dspActionMsg(D, parameter.getRecordType(),
+								toInteger(nameIn(this, "global.dcr_number")),
+								toInteger(nvl(nameIn(this, vBlockName + ".processing_cycle"),
+										global.getProcessingCycle())),
+								"");
+
+					}
+
+				}
+
+				else {
+					if (Arrays.asList(Y, S, H, O)
+							.contains(nameIn(this, system.getCursorBlock() + ".validate_ind"))) {
+
+						refreshMasterLib.deleteFromRefTable(
+								toInteger(nameIn(this, system.getCursorBlock() + ".create_dcr_number")), 0);
+
+					}
+
+					copy("DELETED", vBlockName + ".record_status");
+					deleteRecord("");
+				}
+
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrKeyDelrec executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrKeyDelrec Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	private List<Integer> currentRecordIndexes = new ArrayList<>();
+
+	private void resetRecordStatus() {
+		for (Integer index : currentRecordIndexes) {
+			if (Objects.equals(system.getCurrentBlock(), "plStdContrlAirspaceCommMr")) {
+				plStdContrlAirspaceCommMr.getRow(index).setRecordStatus(FormConstant.QUERIED);
+			}
+		}
+	}
+
+	public void validateBeforeCommit(ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		int oldIndex = system.getCursorRecordIndex();
+		DuBlock<?> recs = ((DuBlock<?>) nameIn(this, system.getCursorBlock()));
+		system.setCursorRecordIndex(0);
+		for (Object rec : recs.getData()) {
+			if (Objects.equals(nameIn(rec, "recordStatus"), FormConstant. INSERT)) {
+				plStdContrlAirspaceCommMrPreInsert(reqDto);
+				whenValidateRecord(reqDto);
+			}
+			system.setCursorRecordIndex(system.getCursorRecordIndex() + 1);
+		}
+		system.setCursorRecordIndex(0);
+		for (Object rec : recs.getData()) {
+			if (Objects.equals(nameIn(rec, "recordStatus"), FormConstant. CHANGED)) {
+				plStdContrlAirspaceCommMrPreUpdate(reqDto);
+				whenValidateRecord(reqDto);
+			}
+			system.setCursorRecordIndex(system.getCursorRecordIndex() + 1);
+		}
+		system.setCursorRecordIndex(oldIndex);
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> whenValidateRecord(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" whenValidateRecord Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		OracleHelpers.bulkClassMapper(reqDto, this);
+
+		try {
+
+			String pBlock = toSnakeCase(system.getCursorBlock());
+
+			if (like(PL_UNDERSCORE_PATTERN, pBlock) && Arrays.asList(FormConstant. CHANGED, FormConstant. INSERT).contains(system.getRecordStatus())) {
+				if (!Arrays.asList(Y, S, H, W, N, I, O)
+						.contains(nvl(nameIn(this, pBlock + ".validate_ind"), Y))) {
+
+					coreptLib.dspMsg("Validate indicator can only 'Y','S','H','W','N' or 'I'");
+					throw new FormTriggerFailureException(event);
+
+				}
+
+				if (Objects.equals(parameter.getRecordType(), T)) {
+
+					coreptLib.validateextrafields(toInteger(nameIn(this, toSnakeCase(pBlock) + ".processing_cycle")),
+							toString(nameIn(this, pBlock + ".generated_in_house_flag")));
+				}
+
+				if (!Objects.equals(nameIn(this, pBlock + ".processing_cycle"), null)
+						&& Objects.equals(nameIn(this, pBlock + ".data_supplier"), null)) {
+					copy(global.getDataSupplier(), pBlock + ".dataSupplier");
+
+				}
+
+				doValidate((pBlock), Y);
+				if (!Objects.equals(parameter.getWorkType(), "VIEW")
+						&& Objects.equals(parameter.getRecordType(), T)) {
+					if (Objects.equals(nameIn(this, pBlock + ".generated_in_house_flag"), N)) {
+						setBlockItemProperty(pBlock + ".processing_cycle", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						setBlockItemProperty(pBlock + ".generated_in_house_flag", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						setBlockItemProperty(pBlock + ".validate_ind", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+
+						if (like(PATTERN_MR, pBlock)) {
+							setItemProperty(pBlock + ".processing_cycle", "current_record_attribute", "notUpdatable");
+							setItemProperty(pBlock + ".generated_in_house_flag", "current_record_attribute",
+									"notUpdatable");
+							setItemProperty(pBlock + ".validate_ind", "current_record_attribute", "default");
+
+						}
+
+					}
+
+					else {
+						setBlockItemProperty(pBlock + ".processing_cycle", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						setBlockItemProperty(pBlock + ".generated_in_house_flag", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_TRUE);
+						setBlockItemProperty(pBlock + ".validate_ind", FormConstant.UPDATE_ALLOWED,
+								FormConstant.PROPERTY_FALSE);
+						if (like(PATTERN_MR, pBlock)) {
+							setItemProperty(pBlock + ".processing_cycle", "current_record_attribute", "default");
+							setItemProperty(pBlock + ".generated_in_house_flag", "current_record_attribute", "default");
+							setItemProperty(pBlock + ".validate_ind", "current_record_attribute", "notUpdatable");
+
+						}
+
+					}
+
+				}
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" whenValidateRecord executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+
+		} catch (Exception e) {
+			log.error("Error while Executing the whenValidateRecord Service");
+
+		}
+		OracleHelpers.ResponseMapper(this, resDto);
+		log.info(" whenValidateRecord executed successfully");
+		return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrWhenClearBlock(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrWhenClearBlock Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			setItemProperty("control_block.std_validation_errors_mr", FormConstant.VISIBLE,
+					FormConstant.PROPERTY_FALSE);
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrWhenClearBlock executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrWhenClearBlock Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrKeyDelrecPrev(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrKeyDelrecPrev Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			Integer vButton = 0;
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(parameter.getWorkType(), "VIEW")) {
+				log.debug("plStdContrlAirspaceCommMrKeyDelrecPrev WorkType value is VIEW");
+			}
+
+			else {
+				if (!Arrays.asList(FormConstant.NEW_VALUE, FormConstant. INSERT).contains(system.getRecordStatus())) {
+
+					alertDetails.getCurrent();
+					if (alertDetails.getAlerts().size() < alertDetails.getCurrentAlert()) {
+						vButton = displayAlert.moreButtons(S, "Delete Record",
+								"You are going to delete this record. Please be sure." + chr(10) + " ", "Delete It",
+								"Cancel", "");
+						alertDetails.createNewRecord("alertid");
+						throw new AlertException(event, alertDetails);
+					} else {
+						vButton = alertDetails.getAlertValue("alertid", alertDetails.getCurrentAlert());
+					}
+					if (Integer.valueOf(1).equals(vButton)) {
+
+						String vBlockName = DbConstants.PL_STD_CONTRL_AIRSPACE_COMM_MR;
+						Integer vDcrNumber = toInteger(
+								plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCreateDcrNumber());
+						Integer vProcessingCycle = toInteger(
+								plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle());
+						String vValidateInd = plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+								.getValidateInd();
+						String vStatus = system.getRecordStatus();
+						String vTableType = "M2C";
+
+						if (Objects.equals(vStatus, FormConstant. CHANGED)) {
+
+							vValidateInd = app.executeFunction(String.class, DbConstants.SCHEMA_CPTM, "GET_VALIDATE_IND",
+									"REFRESH_ML_UTILITIES", OracleTypes.VARCHAR,
+									new ProcedureInParameter("p_table",
+											getBlockProperty(vBlockName, "Query_Data_Source_Name"),
+											OracleTypes.VARCHAR),
+									new ProcedureInParameter("p_dcr", nameIn(this, vBlockName + ".create_dcr_number"),
+											OracleTypes.NUMBER));
+
+						}
+
+						if (!Objects.equals(vStatus, "NEW")) {
+							if (Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+								if (Objects.equals(refreshMasterLib.checkReferenceInfo(vBlockName, D), N)) {
+									throw new FormTriggerFailureException();
+
+								}
+
+							}
+
+							if (Objects.equals(global.getLibRefreshed(), Y)
+									&& Arrays.asList(global.getNewProcessingCycle(), global.getOldProcessingCycle())
+											.contains(toString(vProcessingCycle))
+									&& Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+
+
+								refreshMasterLib.refreshARecord(vTableType, vDcrNumber, vProcessingCycle,
+										ltrim(upper(getBlockProperty(vBlockName, "Query_Data_Source_Name")), "PL_"),
+										I, null);
+								deleteRecord(system.getCursorBlock());
+								try {
+									validateBeforeCommit(reqDto);
+									commitForm(this);
+								} catch (org.hibernate.exception.ConstraintViolationException e) {
+									coreptLib.dspMsg(
+											"ORACLE error: unable to INSERT record.\r\n\nPlease check the exact error message from the \"Display\r\nError\" in the \"HELP\" menu");
+								}
+								system.setFormStatus(FormConstant.QUERIED);
+								message("Records have been saved successfully");
+
+								refreshMasterLib.setRecordGroup(vDcrNumber, I, vBlockName, vProcessingCycle, D);
+
+								coreptLib.dspMsg("The refresh master library table for this deletion is done and"
+										+ chr(10) + "all changes are commited.");
+
+							}
+
+							else {
+								deleteRecord("");
+
+							}
+							if (Arrays.asList(Y, S, H, O).contains(vValidateInd)) {
+
+								refreshMasterLib.deleteFromRefTable(vDcrNumber, 0);
+
+							}
+
+						}
+
+					}
+
+				}
+
+				else {
+					if (Arrays.asList(Y, S, H, O).contains(
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getValidateInd())) {
+
+						refreshMasterLib.deleteFromRefTable(toInteger(
+								plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getCreateDcrNumber()),
+								0);
+
+					}
+
+					deleteRecord(system.getCursorBlock());
+
+				}
+
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrKeyDelrecPrev executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrKeyDelrecPrev Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> plStdContrlAirspaceCommMrProcessingCycleWhenValidateItem(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" plStdContrlAirspaceCommMrProcessingCycleWhenValidateItem Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			if (Objects.equals(
+					rtrim(toString(
+							plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex()).getProcessingCycle())),
+					null)) {
+				plStdContrlAirspaceCommMr.getRow(system.getCursorRecordIndex())
+						.setProcessingCycle(global.getProcessingCycle());
+
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" plStdContrlAirspaceCommMrProcessingCycleWhenValidateItem executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the plStdContrlAirspaceCommMrProcessingCycleWhenValidateItem Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> stdContrlAirspaceCommPreQuery(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" stdContrlAirspaceCommPreQuery Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			stdContrlAirspaceComm.getRow(system.getCursorRecordIndex()).setDataSupplier(global.getDataSupplier());
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" stdContrlAirspaceCommPreQuery executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the stdContrlAirspaceCommPreQuery Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> displayItemBlockFormPartNumberWhenNewItemInstance(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" displayItemBlockFormPartNumberWhenNewItemInstance Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" displayItemBlockFormPartNumberWhenNewItemInstance executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the displayItemBlockFormPartNumberWhenNewItemInstance Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> displayItemBlockRefreshButtonWhenButtonPressed(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" displayItemBlockRefreshButtonWhenButtonPressed Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			Integer totalRows = 0;
+			Integer vButton = 0;
+
+			if (Objects.equals(system.getFormStatus(), FormConstant. CHANGED)) {
+
+				coreptLib.dspMsg("There is changes in the form, please do commit first.");
+			}
+
+			totalRows = getGroupRowCount(findGroup("refreshRecordsGroup"));
+	
+
+			alertDetails.getCurrent();
+			if (alertDetails.getAlerts().size() < alertDetails.getCurrentAlert()) {
+				displayAlert.moreButtons(S, "Refresh Record",
+						"You have modified or inserted or deleted " + totalRows + " record(s)*." + chr(10)
+								+ "Do you want to refresh the Master Library now?" + chr(10) + chr(10),
+						"Refresh", "Cancel", "");
+				alertDetails.createNewRecord("alertid");
+				throw new AlertException(event, alertDetails);
+			} else {
+				vButton = alertDetails.getAlertValue("alertid", alertDetails.getCurrentAlert());
+			}
+
+			if (Objects.equals(vButton, 1)) {
+
+				refreshMasterLib.refreshRecords(totalRows);
+
+			}
+
+			else {
+				log.debug("vButton is not 1");
+			}
+
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" displayItemBlockRefreshButtonWhenButtonPressed executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the displayItemBlockRefreshButtonWhenButtonPressed Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> controlBlockStdOverideMrWhenButtonPressed(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" controlBlockStdOverideMrWhenButtonPressed Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			String vItem = system.getCursorItem();
+
+			showView("STD_OVER");
+			goItem("control_block.std_override_errors");
+			goItem(vItem);
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" controlBlockStdOverideMrWhenButtonPressed executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the controlBlockStdOverideMrWhenButtonPressed Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> controlBlockCloseStdOverrideWhenButtonPressed(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" controlBlockCloseStdOverrideWhenButtonPressed Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			hideView("STD_OVER");
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" controlBlockCloseStdOverrideWhenButtonPressed executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the controlBlockCloseStdOverrideWhenButtonPressed Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+	}
+
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> toolsDuplicate(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" toolsDuplicate Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			OracleHelpers.bulkClassMapper(this, coreptMenuMmbServiceImpl);
+			coreptMenuMmbServiceImpl.toolsDuplicate(this);
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" toolsDuplicate executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the toolsDuplicate Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ContrlAirspaceCommTriggerResponseDto>> toolsExportDestination(
+			ContrlAirspaceCommTriggerRequestDto reqDto) throws Exception {
+		log.info(" toolsExportDestination Executing");
+		BaseResponse<ContrlAirspaceCommTriggerResponseDto> responseObj = new BaseResponse<>();
+		ContrlAirspaceCommTriggerResponseDto resDto = new ContrlAirspaceCommTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			OracleHelpers.bulkClassMapper(this, coreptMenuMmbServiceImpl);
+			coreptMenuMmbServiceImpl.toolsExportFormData(this);
+			OracleHelpers.ResponseMapper(this, resDto);
+			log.info(" toolsExportDestination executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (Exception e) {
+			log.error("Error while Executing the toolsExportDestination Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+
+	}
+
+	@Override
+	public ResponseEntity<ResponseDto<ExportDestinationTriggerResponseDto>> exportDestination(
+			ExportDestinationTriggerRequestDto reqDto) throws Exception {
+		log.info(" exportDestination Executing");
+		BaseResponse<ExportDestinationTriggerResponseDto> responseObj = new BaseResponse<>();
+		ExportDestinationTriggerResponseDto resDto = new ExportDestinationTriggerResponseDto();
+		try {
+			OracleHelpers.bulkClassMapper(reqDto, this);
+			BlockDetail mstBlockData = null;
+			StringBuilder reportfile = new StringBuilder();
+			List<DuRecord> recs = null;
+			if (OracleHelpers.isNullorEmpty(selectOptions.getFileName())) {
+				PropertyHelpers.setAlertProperty(event, "dsp_msg", "stop", "Forms",
+						" Client file name cannot be null", "ALERT_MESSAGE_TEXT", "OK", null, null);
+				PropertyHelpers.setShowAlert(event, "dsp_msg", false);
+				throw new FormTriggerFailureException();
+			}
+
+			if (HoneyWellUtils.toCamelCase(system.getCursorBlock()).equals("plStdContrlAirspaceCommMr")) {
+				mstBlockData = reqDto.getExportDataBlocks().get("plStdContrlAirspaceCommMr");
+				List<String> mstPromptNames = getBlockMetaData(mstBlockData, "PROMPT_NAME");
+				List<String> mstDatabseColumns = getBlockMetaData(mstBlockData, "DATABASE_COLUMN");
+				String query = hashUtils.decrypt(mstBlockData.getLastQuery());
+				if (query.contains(" where rno <=")) {
+					query = substrWithLen(query, 0, OracleHelpers.instr(query, " where rno <="));
+				} else if (query.contains(" OFFSET ")) {
+					query = substrWithLen(query, 0, OracleHelpers.instr(query, " OFFSET "));
+				}
+				reportfile.append(getExportHeader(mstPromptNames, 0, selectOptions.getDelimiter()));
+				// Master Fetching..
+				recs = app.executeQuery(query);
+				for (DuRecord mstRec : recs) {
+					PlStdContrlAirspaceCommMr plStdContrlAirspaceCommMr = app.mapResultSetToClass(mstRec,
+							PlStdContrlAirspaceCommMr.class);
+					reportfile.append(getExportData(plStdContrlAirspaceCommMr, mstDatabseColumns, 0,
+							selectOptions.getDelimiter(), selectOptions.getGetTextFile()));
+				}
+
+			} else if (HoneyWellUtils.toCamelCase(system.getCursorBlock()).equals("stdContrlAirspaceComm")) {
+				mstBlockData = reqDto.getExportDataBlocks().get("stdContrlAirspaceComm");
+				List<String> mstPromptNames = getBlockMetaData(mstBlockData, "PROMPT_NAME");
+				List<String> mstDatabseColumns = getBlockMetaData(mstBlockData, "DATABASE_COLUMN");
+				String query = hashUtils.decrypt(mstBlockData.getLastQuery());
+				if (query.contains(" where rno <=")) {
+					query = substrWithLen(query, 0, OracleHelpers.instr(query, " where rno <="));
+				} else if (query.contains(" OFFSET ")) {
+					query = substrWithLen(query, 0, OracleHelpers.instr(query, " OFFSET "));
+				}
+				reportfile.append(getExportHeader(mstPromptNames, 0, selectOptions.getDelimiter()));
+				// Master Fetching..
+				recs = app.executeQuery(query);
+				for (DuRecord mstRec : recs) {
+					StdContrlAirspaceComm stdContrlAirspaceComm = app.mapResultSetToClass(mstRec,
+							StdContrlAirspaceComm.class);
+					reportfile.append(getExportData(stdContrlAirspaceComm, mstDatabseColumns, 0,
+							selectOptions.getDelimiter(), selectOptions.getGetTextFile()));
+				}
+			}
+
+			else if (HoneyWellUtils.toCamelCase(system.getCursorBlock()).equals("message")) {
+				List<String> messageLogs = new ArrayList<>();
+				String dateQuery = """
+						     SELECT TO_CHAR(SYSDATE , 'Month DD,YYYY') as formatted_date  FROM DUAL
+						""";
+
+				String timeQuery = """
+						SELECT  to_char(sysdate,'HH24:MI') FROM DUAL
+						""";
+				DuRecord dateRec = app.selectInto(dateQuery);
+				DuRecord timeRec = app.selectInto(timeQuery);
+
+				reportfile.append("Generated on ").append(dateRec.getObject()).append(" at ")
+						.append(timeRec.getObject()).append("\n").append("\n");
+				mstBlockData = reqDto.getExportDataBlocks().get("message");
+				messageLogs = mstBlockData.getMessageLogs();
+				for (int i = 0; i <= messageLogs.size() - 1; i++) {
+					reportfile.append(messageLogs.get(i)).append("\n");
+				}
+			} else if (HoneyWellUtils.toCamelCase(system.getCursorBlock()).equals("message")) {
+				List<String> messageLogs = new ArrayList<>();
+				String dateQuery = """
+						     SELECT TO_CHAR(SYSDATE , 'Month DD,YYYY') as formatted_date  FROM DUAL
+						""";
+
+				String timeQuery = """
+						SELECT  to_char(sysdate,'HH24:MI') FROM DUAL
+						""";
+				DuRecord dateRec = app.selectInto(dateQuery);
+				DuRecord timeRec = app.selectInto(timeQuery);
+
+				reportfile.append("Generated on ").append(dateRec.getObject()).append(" at ")
+						.append(timeRec.getObject()).append("\n").append("\n");
+				mstBlockData = reqDto.getExportDataBlocks().get("message");
+				messageLogs = mstBlockData.getMessageLogs();
+				for (int i = 0; i <= messageLogs.size() - 1; i++) {
+					reportfile.append(messageLogs.get(i)).append("\n");
+				}
+			}
+			OracleHelpers.ResponseMapper(this, resDto);
+			String base64 = Base64.getEncoder().encodeToString(reportfile.toString().getBytes(StandardCharsets.UTF_8));
+			ReportDetail reportDetail = new ReportDetail();
+			reportDetail.setData(base64);
+			resDto.setReport(reportDetail);
+			goBlock(system.getCursorBlock(), "firstItem");
+			log.info(" exportDestination executed successfully");
+			return responseObj.render(responseObj.formSuccessResponse(DuConstants.RECORD_FETCH, resDto));
+		} catch (RuntimeException e) {
+			log.info("RuntimeException captured");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		} catch (Exception e) {
+			log.error("Error while Executing the exportDestination Service");
+			OracleHelpers.ResponseMapper(this, resDto);
+			return ExceptionUtils.handleException(e, resDto);
+		}
+
+	}
+
+	
+	public void updateAppInstance() {
+		super.app = this.app;
+		super.baseInstance = this;
+		super.groups = this.groups;
+		super.genericNativeQueryHelper = this.genericNativeQueryHelper;
+		super.event = this.event;
+		super.parameter = this.parameter;
+		super.displayAlert = this.displayAlert;
+		super.alertDetails = this.alertDetails;
+		super.system = this.system;
+		super.global = this.global;
+		super.blocksOrder = this.blocksOrder;
+		super.windows = this.windows;
+		OracleHelpers.bulkClassMapper(this, displayAlert);
+		OracleHelpers.bulkClassMapper(this, coreptLib);
+		coreptLib.initialization(this);
+		OracleHelpers.bulkClassMapper(this, coreptTemplateTriggerService);
+		coreptTemplateTriggerService.initialization(this);
+		OracleHelpers.bulkClassMapper(this, coreptMenuMmbServiceImpl);
+		coreptMenuMmbServiceImpl.initialization(this);
+		OracleHelpers.bulkClassMapper(this, refreshMasterLib);
+		refreshMasterLib.initialization(this);
+	}
+}

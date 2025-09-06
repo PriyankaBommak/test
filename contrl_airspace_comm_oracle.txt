@@ -1,0 +1,1064 @@
+ProgramUnits:
+ checkToCommit:
+/*Formatted on 2011/09/05 20:25 (Formatter Plus v4.8.7) */
+PROCEDURE check_to_commit (p_action_type VARCHAR2)
+IS
+   v_button        NUMBER (1);
+   total_rows      NUMBER;
+   v_temp          VARCHAR2 (4000);
+   v_button_text   VARCHAR2 (100);
+   msgnum          NUMBER          := MESSAGE_CODE; -- Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+BEGIN
+   IF :SYSTEM.form_status = 'CHANGED'
+   THEN
+      IF p_action_type = 'COMMIT' THEN
+         v_button_text := 'Cancel';
+      ELSIF p_action_type = 'EXIT' THEN
+         v_button_text := 'Exit Without Save';
+      ELSE
+         v_button_text := 'Cancel Modification';
+      END IF;
+
+      IF :GLOBAL.lib_refreshed = 'Y' THEN
+         v_button :=
+            display_alert.more_buttons
+                       ('S','Refresh Record','You have modified record(s). Select an option: '|| CHR (10)|| ' '|| CHR (10)|| 
+                         --'1. Save without refreshing the Master Library'||chr(10)|| -- Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+                           '1. Save and refresh Master Library'|| CHR (10)|| 
+						   						 '2. Cancel modification, NO Save, NO Refresh',
+                           'Save&Refresh',v_button_text
+                        );
+
+         IF v_button IN (1) THEN -- changed from in (1,2) to in (1) -- Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+            COMMIT_FORM;
+            total_rows :=
+                   GET_GROUP_ROW_COUNT (FIND_GROUP ('Refresh_Records_Group'));
+
+            IF total_rows > 0 THEN
+               refresh_master_library.refresh_records (total_rows);
+            END IF;
+
+            IF (msgnum = 40400) THEN   -- Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+               CLEAR_MESSAGE;
+            END IF;
+         END IF;
+      ELSE
+         IF p_action_type = 'COMMIT' THEN
+            v_button := 1;
+         ELSE
+            v_button :=
+               display_alert.more_buttons
+                  ('S','Refresh Record','Record is modified or inserted or deleted. Select an option: '|| CHR (10)|| ' ',
+                   'Save',v_button_text
+                  );
+         END IF;
+
+-- Begin Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+         IF v_button = 1 THEN
+            COMMIT_FORM;
+
+            IF (msgnum = 40400) THEN
+               CLEAR_MESSAGE;
+            END IF;
+         ELSE
+            EXIT_FORM (no_commit);
+         END IF;
+-- End Fix - SCR 5180 - Eswar KC - 02-Sep-2011
+      END IF;
+
+      -- Here the v_button values are chnaged 2 in place of 3, 1 in place of 2 for SCR 5180 - Eswar KC
+      IF    (:GLOBAL.lib_refreshed = 'Y' AND v_button = 2)
+         OR (:GLOBAL.lib_refreshed != 'Y' AND v_button = 1) THEN
+         IF p_action_type = 'COMMIT' THEN
+            NULL;
+         ELSIF p_action_type = 'EXIT' THEN
+            SET_APPLICATION_PROPERTY (cursor_style, 'DEFAULT');
+            EXIT_FORM (no_commit);
+         ELSE
+            CLEAR_BLOCK (no_commit);
+         END IF;
+      ELSE
+         IF :SYSTEM.form_status = 'CHANGED' THEN
+            RAISE form_trigger_failure;
+         END IF;
+      END IF;
+   --if :system.form_status != 'CHANGED' then
+   -- invalid_record_count(:system.cursor_block,:system.cursor_record,:system.cursor_item);
+   --end if;
+   ELSE
+      refresh_master_library.if_refresh;
+   END IF;
+END;
+
+ doValidate:
+PROCEDURE do_validate(p_block varchar2,p_ignore_ref varchar2 := 'Y') IS
+  v_rrecord  sdv_records.cr_restr_airspace_comm;       
+  v_crecord  sdv_records.cr_contrl_airspace_comm;
+  v_srec    PL_STD_CONTRL_AIRSPACE_COMM%rowtype;       
+	v_err_ind	number := 0;
+	v_err_list cpt_types.errlist_type;
+	v_all_err varchar2(4000) := null;
+	v_nerr    varchar2(3);
+	v_valid   varchar2(1) := null;
+	v_class   varchar2(1);
+	v_ind     varchar2(1) := 'Y';
+BEGIN
+	if :PL_STD_CONTRL_AIRSPACE_COMM_MR.AIRSPACE_TYPE is not null then 
+		:CONTROL_BLOCK.STD_OVERRIDE_ERRORS := null;
+		v_class := :pl_std_contrl_airspace_comm_mr.communication_class;
+		if v_class not in ('E','A') then
+			if not is_override(:global.data_supplier, :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle, 'CONTRL_AIRSPACE_COMM', 979) then
+				v_all_err := '* 979 - '||get_err_text(979);		-- '* Communication Class must be ''A'' or ''E''.';
+				v_ind := 'I';
+			else
+				if v_ind != 'I' then
+					v_ind := 'O';
+				end if;
+			end if;	
+			if (rtrim(:pl_std_contrl_airspace_comm_mr.airport_ident) is null and
+				rtrim(:pl_std_contrl_airspace_comm_mr.fir_uir_ident) is null) or
+				(rtrim(:pl_std_contrl_airspace_comm_mr.airport_ident) is not null and
+				rtrim(:pl_std_contrl_airspace_comm_mr.fir_uir_ident) is not null)then
+				if not is_override(:global.data_supplier, :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle, 'CONTRL_AIRSPACE_COMM', 980) then
+					v_all_err := v_all_err||' * 980 - '||get_err_text(980);
+					--' * The recorcd shall have either Airport Communication data only or Enroute Communication data only.';
+					v_ind := 'I';
+				else
+					if v_ind != 'I' then
+						v_ind := 'O';
+					end if;
+				end if;	
+			end if;
+		elsif v_class = 'A' and 
+  		(rtrim(:pl_std_contrl_airspace_comm_mr.airport_ident) is null or
+  	 	rtrim(:pl_std_contrl_airspace_comm_mr.fir_uir_ident) is not null) then
+  	  if not is_override(:global.data_supplier, :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle, 'CONTRL_AIRSPACE_COMM', 981) then
+				v_all_err := '* 981 - '||get_err_text(981);
+  	 		-- '* Communiation Class is ''A'', the record shall only have Airport Communication data. ';
+				v_ind := 'I';
+		  else
+				if v_ind != 'I' then
+					v_ind := 'O';
+				end if;
+			end if;	  	 
+  	elsif v_class = 'E' and
+  		(rtrim(:pl_std_contrl_airspace_comm_mr.airport_ident) is not null or
+  	 	rtrim(:pl_std_contrl_airspace_comm_mr.fir_uir_ident) is null) then
+  	  if not is_override(:global.data_supplier, :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle, 'CONTRL_AIRSPACE_COMM', 982) then
+				v_all_err := '* 982 - '||get_err_text(982);
+  	 		--'* Communiation Class is ''E'', the record shall only have Enroute Communication data. ';
+				v_ind := 'I';
+		  else
+				if v_ind != 'I' then
+					v_ind := 'O';
+				end if;
+		  end if;	  	   	 
+  	end if;
+		populate_rel_record(p_block, v_srec);
+		RECRV3.vcontrl_airspace_comm('S',v_srec,v_nerr,v_valid, p_ignore_ref);
+		if v_nerr != 'YYY' then
+  		if substr(v_nerr,1,1) = 'N' then
+  			v_all_err := v_all_err||' * 461 - '||get_err_text(461);
+  		end if;
+  		if substr(v_nerr,2,1) = 'N' then
+  			v_all_err := v_all_err||' * 462 - '||get_err_text(462);
+  		end if;
+  		if substr(v_nerr,3,1) = 'N' then
+  			v_all_err := v_all_err||' * 463 - '||get_err_text(463);
+  		end if;
+  	end if;
+  	-- Set validate_ind and display message
+  	Set_Ind_and_Message(p_block,v_all_err, :parameter.work_type, p_ignore_ref, v_ind);
+  	if p_ignore_ref = 'N' then
+  		set_update_dcr;
+  	end if;	
+  	Set_Override_Button(p_block);
+  ELSE
+  	set_initial_error_display(P_BLOCK);
+  end if;
+END;
+
+ populateRelRecord:
+PROCEDURE populate_rel_record 
+     (p_block   in    varchar2,
+      p_srec    out   PL_STD_CONTRL_AIRSPACE_COMM%rowtype) IS
+BEGIN
+  if upper(p_block) = 'PL_STD_CONTRL_AIRSPACE_COMM_MR' then
+  	p_srec.center_icao_code              := :pl_std_contrl_airspace_comm_mr.center_icao_code;
+    p_srec.mult_code                     := :pl_std_contrl_airspace_comm_mr.mult_code;
+    p_srec.airspace_classification       := :pl_std_contrl_airspace_comm_mr.AIRSPACE_CLAASIFICATION;
+    p_srec.airport_icao                  := :pl_std_contrl_airspace_comm_mr.airport_icao;
+    p_srec.airport_ident                 := :pl_std_contrl_airspace_comm_mr.airport_ident;
+    p_srec.fir_uir_address               := :pl_std_contrl_airspace_comm_mr.fir_uir_address;
+    p_srec.fir_uir_ident                 := :pl_std_contrl_airspace_comm_mr.fir_uir_ident;
+    p_srec.fir_uir_ind                   := :pl_std_contrl_airspace_comm_mr.fir_uir_ind;
+    p_srec.airspace_center               := :pl_std_contrl_airspace_comm_mr.airspace_center;
+    p_srec.airspace_type                 := :pl_std_contrl_airspace_comm_mr.airspace_type;
+    p_srec.remote_name                   := :pl_std_contrl_airspace_comm_mr.remote_name;
+    p_srec.communication_type            := :pl_std_contrl_airspace_comm_mr.communication_type;
+    p_srec.freq_units                    := :pl_std_contrl_airspace_comm_mr.freq_units;
+    p_srec.communication_freq 					 := :pl_std_contrl_airspace_comm_mr.communication_freq;
+    p_srec.validate_ind                  := :pl_std_contrl_airspace_comm_mr.validate_ind;
+    --p_srec.processing_cycle              := :pl_std_contrl_airspace_comm_mr.processing_cycle;
+    if :global.recent_cycle >= :pl_std_contrl_airspace_comm_mr.processing_cycle then
+  		p_srec.processing_cycle := :pl_std_contrl_airspace_comm_mr.processing_cycle;
+  	else
+  		p_srec.processing_cycle := :global.recent_cycle;
+  	end if;
+    p_srec.data_supplier                 := :pl_std_contrl_airspace_comm_mr.data_supplier;
+    p_srec.create_dcr_number             := :pl_std_contrl_airspace_comm_mr.create_dcr_number;
+  end if;     
+END;
+
+ setUpdateDcr:
+PROCEDURE SET_UPDATE_DCR IS
+	get_rec_cur  cpt_types.refcur;
+	rstd_CONTRL_airspace_comm PL_STD_CONTRL_AIRSPACE_COMM%rowtype;
+	v_dcr        number      := :PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number;
+	v_count      number      := 0;
+BEGIN
+		open get_rec_cur for select * from PL_STD_CONTRL_AIRSPACE_COMM
+							           where create_dcr_number = v_dcr;	
+		loop
+		fetch get_rec_cur into rstd_CONTRL_airspace_comm;
+		exit when get_rec_cur%notfound;
+		  v_count := v_count + 1;
+		  if nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.COMMUNICATION_TYPE,' ')  != nvl(rstd_CONTRL_airspace_comm.COMMUNICATION_TYPE,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.COMMUNICATION_CLASS,' ') != nvl(rstd_CONTRL_airspace_comm.COMMUNICATION_CLASS,' ')   or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.COMMUNICATION_FREQ,0)    != nvl(rstd_CONTRL_airspace_comm.COMMUNICATION_FREQ,0) or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.FREQ_UNITS,' ')          != nvl(rstd_CONTRL_airspace_comm.FREQ_UNITS,' ') or 
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.REMOTE_NAME,' ')         != nvl(rstd_CONTRL_airspace_comm.REMOTE_NAME,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.FIR_UIR_IDENT,' ')       != nvl(rstd_CONTRL_airspace_comm.FIR_UIR_IDENT,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.FIR_UIR_ADDRESS,' ')     != nvl(rstd_CONTRL_airspace_comm.FIR_UIR_ADDRESS,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.FIR_UIR_IND,' ')         != nvl(rstd_CONTRL_airspace_comm.FIR_UIR_IND,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.AIRPORT_IDENT,' ')       != nvl(rstd_CONTRL_airspace_comm.AIRPORT_IDENT,' ') or
+				 nvl(:PL_STD_CONTRL_AIRSPACE_COMM_MR.AIRPORT_ICAO,' ')        != nvl(rstd_CONTRL_airspace_comm.AIRPORT_ICAO,' ') then
+         :PL_STD_CONTRL_AIRSPACE_COMM_MR.update_dcr_number := :global.dcr_number;  -- Fix - SCR 5175 - Eswar KC - o6 July 2011
+		  end if;  
+		end loop;
+		close get_rec_cur;
+		if v_count = 0 then   -- it is a new record
+			:PL_STD_CONTRL_AIRSPACE_COMM_MR.update_dcr_number := :global.dcr_number;  -- Fix - SCR 5175 - Eswar KC - o6 July 2011
+		end if;
+END;
+
+FormlevelTriggers:
+ whenValidateItem:
+if rtrim(:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE) is null then
+	:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE := :global.processing_cycle;
+end if;	
+
+ preQuery:
+:std_contrl_airspace_comm.data_supplier    := :global.data_supplier;
+
+ preInsert:
+-- Begin Fix - SCR 5767 -Dass -- 04-Oct-2012
+DECLARE
+	 v_dcr_number         NUMBER;
+   v_processing_cycle   NUMBER (6);
+   v_block_name         VARCHAR2 (30) := :SYSTEM.cursor_block;
+   v_allow_update       NUMBER := 0; 
+BEGIN
+	IF :SYSTEM.record_status IN ('CHANGED', 'INSERT') THEN
+         IF NAME_IN (v_block_name || '.processing_cycle') IS NULL  THEN
+            v_allow_update := CHECK_VALID_SUPP_CUST (:global.processing_cycle,:global.processing_cycle,:global.dcr_number,:global.data_supplier,:parameter.record_type);
+         ELSE
+            v_allow_update := CHECK_VALID_SUPP_CUST (NAME_IN (v_block_name || '.processing_cycle'),:global.processing_cycle,:global.dcr_number,:global.data_supplier,:parameter.record_type);
+         END IF;     
+	END IF;
+IF v_allow_update = 1 THEN 
+-- End Fix - SCR 5767 -Dass -- 04-Oct-2012	
+check_wildcard_for_keys('PL_STD_CONTRL_AIRSPACE_COMM_MR');
+-- Populate non updatable fields
+--:pl_std_contrl_airspace_comm_mr.processing_cycle := :global.processing_cycle;
+:pl_std_contrl_airspace_comm_mr.data_supplier    := :global.data_supplier;
+select dcr_number_seq.nextval into :pl_std_contrl_airspace_comm_mr.create_dcr_number from dual;
+do_validate('PL_STD_CONTRL_AIRSPACE_COMM_MR','N');
+--Auto populate the Communication_number field
+if :pl_std_contrl_airspace_comm_mr.COMMUNICATION_CLASS = 'E' then
+	:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER :=
+		:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+		:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_IDENT||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_ADDRESS||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_IND;
+else
+	:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER :=
+		:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+		:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+		:pl_std_contrl_airspace_comm_mr.AIRPORT_IDENT||
+		:pl_std_contrl_airspace_comm_mr.AIRPORT_ICAO;
+end if;
+
+if :global.lib_refreshed = 'Y' and 
+	:pl_std_contrl_airspace_comm_mr.processing_cycle = :global.new_processing_cycle and
+	:pl_std_contrl_airspace_comm_mr.validate_ind in ('Y','S','H','O') then
+		refresh_master_library.set_record_group(:pl_std_contrl_airspace_comm_mr.create_dcr_number,
+																							:pl_std_contrl_airspace_comm_mr.validate_ind,
+																							'PL_STD_CONTRL_AIRSPACE_COMM_MR',
+																							:pl_std_contrl_airspace_comm_mr.processing_cycle,'I');	
+end if;
+--Begin Fix - SCR 5767 -Dass -- 04-Oct-2012
+   ELSE
+         	dsp_action_msg ('I',:parameter.record_type, name_in('global.dcr_number'),NVL(name_in(v_block_name||'.processing_cycle'),:global.processing_cycle));        
+   END IF;
+END;
+--End Fix - SCR 5767 -Dass -- 04-Oct-2012
+
+ preUpdate:
+declare
+	v_block_name         varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM_MR';
+	v_dcr_number         number := :PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number;
+	v_processing_cycle   number(6):= :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle;	
+	v_table              varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM';
+	v_validate_ind_new   varchar2(1);
+	v_validate_ind_old   varchar2(1);
+begin
+	v_validate_ind_old := refresh_ml_utilities.get_validate_ind(v_table,v_dcr_number);
+	if v_validate_ind_old in ('Y','S','H','O') then
+		refresh_master_library.delete_from_ref_table(v_dcr_number);
+	end if;	
+	--
+	do_validate('PL_STD_CONTRL_AIRSPACE_COMM_MR','N');
+	if :pl_std_contrl_airspace_comm_mr.COMMUNICATION_CLASS = 'E' then
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER := 
+									:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+									:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_IDENT||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_ADDRESS||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_IND;
+	else
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER := 
+									:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+									:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+									:pl_std_contrl_airspace_comm_mr.AIRPORT_IDENT||
+									:pl_std_contrl_airspace_comm_mr.AIRPORT_ICAO;
+	end if;		
+	--
+	v_validate_ind_new := name_in(v_block_name||'.validate_ind');
+	if v_validate_ind_old in ('Y','S','H','O') and v_validate_ind_new in ('W','N','I') then
+		if refresh_master_library.check_reference_info(v_block_name) = 'N' then
+			raise form_trigger_failure;
+		end if;
+	end if;
+	-- set for refreshing
+	if :global.lib_refreshed = 'Y' and
+		v_processing_cycle = :global.new_processing_cycle then	
+		if v_validate_ind_new in ('Y','S','H','O') or v_validate_ind_old in ('Y','S','H','O') then
+			refresh_master_library.set_record_group(v_dcr_number,v_validate_ind_new,v_block_name,v_processing_cycle,'U');
+		end if;
+	end if;
+end;
+
+ keyDelrec:
+IF :parameter.work_type = 'VIEW' then
+	null;
+ELSE
+	DECLARE
+		v_block_name    varchar2(30):= :system.cursor_block;--Fix - SCR 5767 - Dass - 04-Oct-2012
+		v_allow_update number :=0; --Fix - SCR 5767 - Dass - 04-Oct-2012
+	Begin	
+	if :system.record_status not in ('NEW','INSERT') then
+	--Begin Fix - SCR 5767 -Dass - 04-Oct-2012		
+			If name_in(v_block_name||'.processing_cycle') is null then
+						v_allow_update:=CHECK_VALID_SUPP_CUST(:global.processing_cycle, :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+			Else
+	  				v_allow_update:=CHECK_VALID_SUPP_CUST(name_in(v_block_name||'.processing_cycle'), :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+			End If;				
+		If v_allow_update = 1 Then		
+	--End Fix - SCR 5767 -Dass - 04-Oct-2012	
+		if display_alert.more_buttons('S','Delete Record',
+							'You are going to delete this record. Please be sure.'||chr(10)||' ',
+						 'Delete It', 'Cancel') = 1 then
+		DECLARE
+			p_table_type varchar2(5) :='M2C'; -- Fix - SCR 0024 - Dass - 03-jan-2012
+		
+			p_table_name varchar2(50):= ltrim(upper(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME)),'PL_');-- Fix - SCR 0024 - Dass - 03-jan-2012
+			v_dcr_number         number := name_in(v_block_name||'.create_dcr_number');
+			v_processing_cycle number(6):= name_in(v_block_name||'.processing_cycle');
+			v_validate_ind  varchar2(1) := name_in(v_block_name||'.validate_ind');
+			v_status        varchar2(10):= :system.record_status;
+			
+		BEGIN
+			if v_status = 'CHANGED' then -- incase validate_ind is manualy modified by user
+				v_validate_ind := refresh_ml_utilities.get_validate_ind(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME),
+																							name_in(v_block_name||'.create_dcr_number'));
+			end if;
+    	if v_validate_ind in ('Y','S','H','O') then
+    		IF refresh_master_library.check_reference_info(v_block_name,'D') = 'N' THEN
+					raise form_trigger_failure;
+				END IF;																						
+			end if;
+			--
+			if v_validate_ind in ('Y','S','H','O') then
+				refresh_master_library.delete_from_ref_table(v_dcr_number);
+			end if;
+			--
+			IF :global.lib_refreshed = 'Y' and
+				v_processing_cycle IN (:global.new_processing_cycle,:global.old_processing_cycle) AND -- Fix - SCR 0024 - Dass - 03-jan-2012
+				v_validate_ind IN ('Y','S','H','O') THEN
+				refresh_master_library.refresh_a_record(p_table_type,v_dcr_number,v_processing_cycle,p_table_name,'I'); -- Fix - SCR 0024 - Dass - 03-jan-2012
+				delete_record; -- Fix - SCR 0024 - Dass - 03-jan-2012
+				commit_form;   -- Fix - SCR 0024 - Dass - 03-jan-2012
+				refresh_master_library.set_record_group(v_dcr_number,'I',v_block_name,v_processing_cycle,'D'); -- Added on 01/22/2004
+				dsp_msg('The refresh master library table for this deletion is done and all changes are commited.'); -- Fix - SCR 0024 - Dass - 03-jan-2012
+			ELSE
+				delete_record;
+			END IF;
+		END;
+		end if;
+		
+			--Begin Fix - SCR 5767 -Dass - 04-Oct-2012
+				Else
+		         	dsp_action_msg ('D',:parameter.record_type, name_in('global.dcr_number'),NVL(name_in(v_block_name||'.processing_cycle'),:global.processing_cycle));        
+				End If;
+				--End Fix - SCR 5767 -Dass - 04-Oct-2012	
+		else
+				if name_in(:system.cursor_block||'.validate_ind') in ('Y','S','H','O') then -- Fix - SCR 0024 - Dass - 03-jan-2012
+					refresh_master_library.delete_from_ref_table(name_in(:system.cursor_block||'.create_dcr_number')); -- Fix - SCR 0024 - Dass - 03-jan-2012
+				end if;
+				delete_record;		
+		end if;	
+	
+	END;
+END IF;
+
+ whenClearBlock:
+set_item_property('control_block.STD_VALIDATION_ERRORS_MR',VISIBLE,PROPERTY_FALSE);
+
+ keyDelrecPrev:
+IF :parameter.work_type = 'VIEW' then
+	null;	
+ELSE
+	if :system.record_status not in ('NEW','INSERT') then
+		if display_alert.more_buttons('S','Delete Record',
+							'You are going to delete this record. Please be sure.'||chr(10)||' ',
+						 'Delete It', 'Cancel') = 1 then
+			DECLARE
+				v_block_name    varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM_MR';		
+				v_dcr_number         number := :PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number;
+				v_processing_cycle number(6):= :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle;
+				v_validate_ind  varchar2(1) := :PL_STD_CONTRL_AIRSPACE_COMM_MR.validate_ind;
+				v_status        varchar2(10):= :system.record_status;
+				v_table_type    varchar2(5) :='M2C';-- Fix - SCR 0024 - Dass - 03-jan-2012
+			BEGIN
+				if v_status = 'CHANGED' then
+					v_validate_ind := refresh_ml_utilities.get_validate_ind(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME),
+																							:PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number);
+				end if;
+				--
+    		if v_status != 'NEW' then
+    			if v_validate_ind in ('Y','S','H','O') then
+    				IF refresh_master_library.check_reference_info(v_block_name,'D') = 'N' THEN
+    					raise form_trigger_failure;
+						END IF;																						
+					end if;
+					--
+					IF :global.lib_refreshed = 'Y' and
+						v_processing_cycle in (:global.new_processing_cycle,:global.old_processing_cycle) and -- Fix - SCR 0024 - Dass - 03-jan-2012
+						v_validate_ind IN ('Y','S','H','O') THEN
+						refresh_master_library.refresh_a_record(v_table_type,v_dcr_number,v_processing_cycle,ltrim(upper(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME)),'PL_'),'I');-- Fix - SCR 0024 - Dass - 03-jan-2012
+						delete_record;-- Fix - SCR 0024 - Dass - 03-jan-2012
+						commit_form;-- Fix - SCR 0024 - Dass - 03-jan-2012
+						refresh_master_library.set_record_group(v_dcr_number,'I',v_block_name,v_processing_cycle,'U');
+						dsp_msg('The refresh master library table for this deletion is done and all changes are commited.');-- Fix - SCR 0024 - Dass - 03-jan-2012
+					else -- Fix - SCR 0024 - Dass - 03-jan-2012
+						delete_record;-- Fix - SCR 0024 - Dass - 03-jan-2012
+					END IF;
+					--
+					if v_validate_ind in ('Y','S','H','O') then
+						refresh_master_library.delete_from_ref_table(v_dcr_number);
+					end if;
+				end if;									
+			END;
+		end if;
+		else
+		if :PL_STD_CONTRL_AIRSPACE_COMM_MR.validate_ind in ('Y','S','H','O') then
+			refresh_master_library.delete_from_ref_table(:PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number);
+		end if;
+		delete_record;
+	end if;	
+END IF;	
+
+
+
+ whenNewItemInstance:
+
+
+ whenButtonPressed:
+
+
+ whenCustomItemEvent:
+
+
+ onError:
+DECLARE
+   msgnum NUMBER       := error_CODE; 
+   msgtxt VARCHAR2(80) := error_TEXT; 
+   msgtyp VARCHAR2(3)  := error_TYPE; 
+   v_block_name    varchar2(30):= :system.cursor_block;   -- Fix - SCR 5767 -Das-- 04-Oct-2012  			
+BEGIN 
+   Set_Application_Property(cursor_style,'DEFAULT');
+   IF (msgnum = 40400 or msgnum = 40406 or msgnum = 40407) THEN 
+      Message('Changes saved successfully'); 
+   ELSIF msgnum in (41051, 40350, 47316, 40353) then
+   	  null;
+   ELSIF msgnum = 41050 and :parameter.work_type = 'VIEW' then
+   	  null;
+   ELSIF msgnum in (40401, 40405) THEN 
+      null;
+   ELSIF msgnum = 40100 then
+   		clear_message;
+   		message('At the first record.');
+   ELSIF msgnum = 40735 and msgtxt like '%01031%' then
+   		clear_message;
+   		dsp_msg(msgtxt||' Insufficient privileges. ');
+   ELSIF msgnum in (40508,40509) then
+   		dsp_msg(msgtxt||chr(10)||chr(10)||
+   		'Please check the exact error message from the "Display Error" in the "HELP" menu');
+   		--raise form_trigger_failure; 		
+   --Begin Fix - SCR 5767 -Dass-- 04-Oct-2012  			
+   ELSIF msgnum IN (40200) THEN
+   	IF :parameter.upd_rec = 'Y' THEN
+   		IF :parameter.work_type != 'VIEW' THEN
+         	dsp_action_msg ('U',:parameter.record_type, name_in('global.dcr_number'),NVL(name_in(v_block_name||'.processing_cycle'),:global.processing_cycle));         
+   		ELSE
+   			dsp_msg(msgtxt);
+   	  	raise form_trigger_failure;			
+   	  END IF;	
+   	ELSE
+   		dsp_msg(msgtxt);
+   	  raise form_trigger_failure;	
+   	END IF ;
+   	ELSIF msgnum = 41050 and :parameter.work_type != 'VIEW' then
+   	  IF :parameter.upd_rec = 'Y' THEN
+   	  	NULL;
+   	  ELSE
+   	  	dsp_msg(msgtxt);
+   	  	raise form_trigger_failure;
+   	  END IF;
+  --End Fix - SCR 5767 -Dass-- 04-Oct-2012   
+   ELSE 
+      display_alert.one_button('S','Error',msgtyp||'-'||TO_CHAR(msgnum)||': '||msgtxt); 
+      --raise form_trigger_failure;
+   END IF; 
+END; 
+
+
+ onMessage:
+DECLARE
+   msgnum NUMBER       := MESSAGE_CODE; 
+   msgtxt VARCHAR2(80) := MESSAGE_TEXT; 
+   msgtyp VARCHAR2(3)  := MESSAGE_TYPE; 
+BEGIN 
+   Set_Application_Property(cursor_style,'DEFAULT');
+   IF (msgnum = 40400 or msgnum = 40406 or msgnum = 40407) THEN 
+     CLEAR_MESSAGE;
+    --Begin Fix SCR 5767 -- Dass --04-Sep-2012     
+     	:parameter.upd_rec:='N';
+		  set_block_property(Name_in('System.Cursor_Block'),update_allowed,property_true);
+    --End Fix SCR 5767 -- Dass --04-Sep-2012 
+     Message('Record has been saved successfully'); 
+   ELSIF msgnum in (41051,40350,47316,40353) then
+   	  null;
+   ELSIF msgnum = 41050 and :parameter.work_type = 'VIEW' then
+   	  null;
+   ELSIF msgnum in (40401, 40405) THEN 
+      null;
+   ELSE 
+      display_alert.one_button('S','Error',msgtyp||'-'||TO_CHAR(msgnum)||': '||msgtxt); 
+      raise form_trigger_failure;
+   END IF; 
+END; 
+
+ keyExit:
+if :system.mode = 'NORMAL' and :parameter.work_type != 'VIEW' then
+	CHECK_TO_COMMIT('EXIT');
+end if;
+Set_Application_Property(cursor_style,'DEFAULT');
+Exit_form;
+
+ whenNewFormInstance:
+Initialize_Form;
+set_block;
+if_from_error_summary;
+
+ keyCommit:
+if :parameter.work_type = 'VIEW' then
+	null;
+else
+	check_to_commit('COMMIT');
+end if;
+
+ keyEdit:
+
+
+ keyDuprec:
+
+
+ keyNxtblk:
+
+
+ keyPrvblk:
+
+
+ keyDupItem:
+
+
+ keyCrerec:
+
+
+ keyExeqry:
+
+
+ keyEntqry:
+
+
+ keyClrfrm:
+
+
+ whenNewBlockInstance:
+
+
+ whenNewRecordInstance:
+DECLARE
+	p_block varchar2(50) := :system.cursor_block;
+	v_allow_update number:=0; --- Fix - SCR 5767 -Dass-- 04-Oct-2012 
+BEGIN
+	if p_block like 'PL_%' then
+	if :system.mode = 'NORMAL' and nvl(name_in(p_block||'.validate_ind'),'N') != 'Y' 
+		and name_in(p_block||'.processing_cycle') is not null then
+		do_validate(p_block);
+	else
+		set_initial_error_display(p_block);		
+	end if;	
+	
+	if :parameter.work_type != 'VIEW' and :parameter.record_type = 'T' then
+		if name_in(p_block||'.generated_in_house_flag') = 'N' then
+			set_item_property(p_block||'.processing_cycle',update_allowed,PROPERTY_FALSE);
+			set_item_property(p_block||'.generated_in_house_flag',update_allowed,PROPERTY_FALSE);
+			set_item_property(p_block||'.validate_ind',update_allowed,PROPERTY_TRUE);
+			if p_block not like '%MR' then
+				set_item_property(p_block||'.processing_cycle',current_record_attribute,'Not_updatable');
+				set_item_property(p_block||'.generated_in_house_flag',current_record_attribute,'Not_updatable');
+				set_item_property(p_block||'.validate_ind',current_record_attribute,'default');
+			end if;
+		else
+			set_item_property(p_block||'.generated_in_house_flag',update_allowed,PROPERTY_TRUE);
+			set_item_property(p_block||'.validate_ind',update_allowed,PROPERTY_FALSE);		
+			if p_block not like '%MR' then
+				set_item_property(p_block||'.generated_in_house_flag',current_record_attribute,'default');
+				set_item_property(p_block||'.validate_ind',current_record_attribute,'Not_updatable');	
+			end if;
+			if :global.lib_refreshed = 'Y' and name_in(p_block||'.generated_in_house_flag') = 'Y' then
+				set_item_property(p_block||'.processing_cycle',update_allowed,PROPERTY_FALSE);
+				if p_block not like '%MR' then
+					set_item_property(p_block||'.processing_cycle',current_record_attribute,'Not_updatable');
+				end if;
+			else	
+				set_item_property(p_block||'.processing_cycle',update_allowed,PROPERTY_TRUE);
+				if p_block not like '%MR' then
+					set_item_property(p_block||'.processing_cycle',current_record_attribute,'default');
+				end if;
+			end if;				
+		end if;	
+	end if;
+	-- Begin Fix - SCR 5767 -Dass -- 04-Oct-2012					
+					If name_in(p_block||'.processing_cycle') is null then
+						v_allow_update:=CHECK_VALID_SUPP_CUST(:global.processing_cycle, :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+					Else
+						v_allow_update:=CHECK_VALID_SUPP_CUST(name_in(p_block||'.processing_cycle'), :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+					End If;	
+		
+			If v_allow_update = 1 Then
+						:parameter.upd_rec:='N';
+		  			set_block_property(p_block,update_allowed,property_true);
+		  			
+			Else
+						:parameter.upd_rec:='Y';
+		  			set_block_property(p_block,update_allowed,property_false);
+		  			If name_in(p_block||'.processing_cycle') <> :global.processing_cycle then
+								RAISE FORM_trigger_failure;
+		  			End If;
+		  End If;
+--End Fix - SCR 5767 -Dass -- 04-Oct-2012				
+end if;	
+END;
+
+
+ whenValidateRecord:
+
+
+ whenFormNavigate:
+--Added for SCR 7352 -- Madhu -- 21-Jun-2022
+IF :system.form_status = 'CHANGED' AND Name_In('global.check_save') = 'Y' THEN 
+	Check_Save_PRC('Control Airspace Comm');
+END IF;
+
+BlocklevelTriggers:
+ plStdContrlAirspaceCommMrwhenValidateItem:
+if rtrim(:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE) is null then
+	:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE := :global.processing_cycle;
+end if;	
+
+ plStdContrlAirspaceCommMrpreQuery:
+if :global.from_error_summary != 'Y' then
+:pl_std_contrl_airspace_comm_mr.data_supplier    := :global.data_supplier;
+if :display_item_block.allow_both_cycles = 'N' then
+  :pl_std_contrl_airspace_comm_mr.processing_cycle := :global.processing_cycle;
+end if;
+end if;
+
+
+ plStdContrlAirspaceCommMrpreInsert:
+-- Begin Fix - SCR 5767 -Dass -- 04-Oct-2012
+DECLARE
+	 v_dcr_number         NUMBER;
+   v_processing_cycle   NUMBER (6);
+   v_block_name         VARCHAR2 (30) := :SYSTEM.cursor_block;
+   v_allow_update       NUMBER := 0; 
+BEGIN
+	IF :SYSTEM.record_status IN ('CHANGED', 'INSERT') THEN
+         IF NAME_IN (v_block_name || '.processing_cycle') IS NULL  THEN
+            v_allow_update := CHECK_VALID_SUPP_CUST (:global.processing_cycle,:global.processing_cycle,:global.dcr_number,:global.data_supplier,:parameter.record_type);
+         ELSE
+            v_allow_update := CHECK_VALID_SUPP_CUST (NAME_IN (v_block_name || '.processing_cycle'),:global.processing_cycle,:global.dcr_number,:global.data_supplier,:parameter.record_type);
+         END IF;     
+	END IF;
+IF v_allow_update = 1 THEN 
+-- End Fix - SCR 5767 -Dass -- 04-Oct-2012	
+check_wildcard_for_keys('PL_STD_CONTRL_AIRSPACE_COMM_MR');
+-- Populate non updatable fields
+--:pl_std_contrl_airspace_comm_mr.processing_cycle := :global.processing_cycle;
+:pl_std_contrl_airspace_comm_mr.data_supplier    := :global.data_supplier;
+select dcr_number_seq.nextval into :pl_std_contrl_airspace_comm_mr.create_dcr_number from dual;
+do_validate('PL_STD_CONTRL_AIRSPACE_COMM_MR','N');
+--Auto populate the Communication_number field
+if :pl_std_contrl_airspace_comm_mr.COMMUNICATION_CLASS = 'E' then
+	:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER :=
+		:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+		:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_IDENT||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_ADDRESS||
+		:pl_std_contrl_airspace_comm_mr.FIR_UIR_IND;
+else
+	:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER :=
+		:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+		:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+		:pl_std_contrl_airspace_comm_mr.AIRPORT_IDENT||
+		:pl_std_contrl_airspace_comm_mr.AIRPORT_ICAO;
+end if;
+
+if :global.lib_refreshed = 'Y' and 
+	:pl_std_contrl_airspace_comm_mr.processing_cycle = :global.new_processing_cycle and
+	:pl_std_contrl_airspace_comm_mr.validate_ind in ('Y','S','H','O') then
+		refresh_master_library.set_record_group(:pl_std_contrl_airspace_comm_mr.create_dcr_number,
+																							:pl_std_contrl_airspace_comm_mr.validate_ind,
+																							'PL_STD_CONTRL_AIRSPACE_COMM_MR',
+																							:pl_std_contrl_airspace_comm_mr.processing_cycle,'I');	
+end if;
+--Begin Fix - SCR 5767 -Dass -- 04-Oct-2012
+   ELSE
+         	dsp_action_msg ('I',:parameter.record_type, name_in('global.dcr_number'),NVL(name_in(v_block_name||'.processing_cycle'),:global.processing_cycle));        
+   END IF;
+END;
+--End Fix - SCR 5767 -Dass -- 04-Oct-2012
+
+ plStdContrlAirspaceCommMrpreUpdate:
+declare
+	v_block_name         varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM_MR';
+	v_dcr_number         number := :PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number;
+	v_processing_cycle   number(6):= :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle;	
+	v_table              varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM';
+	v_validate_ind_new   varchar2(1);
+	v_validate_ind_old   varchar2(1);
+begin
+	v_validate_ind_old := refresh_ml_utilities.get_validate_ind(v_table,v_dcr_number);
+	if v_validate_ind_old in ('Y','S','H','O') then
+		refresh_master_library.delete_from_ref_table(v_dcr_number);
+	end if;	
+	--
+	do_validate('PL_STD_CONTRL_AIRSPACE_COMM_MR','N');
+	if :pl_std_contrl_airspace_comm_mr.COMMUNICATION_CLASS = 'E' then
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER := 
+									:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+									:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_IDENT||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_ADDRESS||
+									:pl_std_contrl_airspace_comm_mr.FIR_UIR_IND;
+	else
+		:pl_std_contrl_airspace_comm_mr.COMMUNICATION_NUMBER := 
+									:pl_std_contrl_airspace_comm_mr.REMOTE_NAME|| 
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_FREQ||
+									:pl_std_contrl_airspace_comm_mr.COMMUNICATION_TYPE||
+									:pl_std_contrl_airspace_comm_mr.FREQ_UNITS||
+									:pl_std_contrl_airspace_comm_mr.AIRPORT_IDENT||
+									:pl_std_contrl_airspace_comm_mr.AIRPORT_ICAO;
+	end if;		
+	--
+	v_validate_ind_new := name_in(v_block_name||'.validate_ind');
+	if v_validate_ind_old in ('Y','S','H','O') and v_validate_ind_new in ('W','N','I') then
+		if refresh_master_library.check_reference_info(v_block_name) = 'N' then
+			raise form_trigger_failure;
+		end if;
+	end if;
+	-- set for refreshing
+	if :global.lib_refreshed = 'Y' and
+		v_processing_cycle = :global.new_processing_cycle then	
+		if v_validate_ind_new in ('Y','S','H','O') or v_validate_ind_old in ('Y','S','H','O') then
+			refresh_master_library.set_record_group(v_dcr_number,v_validate_ind_new,v_block_name,v_processing_cycle,'U');
+		end if;
+	end if;
+end;
+
+ plStdContrlAirspaceCommMrkeyDelrec:
+IF :parameter.work_type = 'VIEW' then
+	null;
+ELSE
+	DECLARE
+		v_block_name    varchar2(30):= :system.cursor_block;--Fix - SCR 5767 - Dass - 04-Oct-2012
+		v_allow_update number :=0; --Fix - SCR 5767 - Dass - 04-Oct-2012
+	Begin	
+	if :system.record_status not in ('NEW','INSERT') then
+	--Begin Fix - SCR 5767 -Dass - 04-Oct-2012		
+			If name_in(v_block_name||'.processing_cycle') is null then
+						v_allow_update:=CHECK_VALID_SUPP_CUST(:global.processing_cycle, :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+			Else
+	  				v_allow_update:=CHECK_VALID_SUPP_CUST(name_in(v_block_name||'.processing_cycle'), :global.processing_cycle, :global.dcr_number,:global.data_supplier,:parameter.record_type);	
+			End If;				
+		If v_allow_update = 1 Then		
+	--End Fix - SCR 5767 -Dass - 04-Oct-2012	
+		if display_alert.more_buttons('S','Delete Record',
+							'You are going to delete this record. Please be sure.'||chr(10)||' ',
+						 'Delete It', 'Cancel') = 1 then
+		DECLARE
+			p_table_type varchar2(5) :='M2C'; -- Fix - SCR 0024 - Dass - 03-jan-2012
+		
+			p_table_name varchar2(50):= ltrim(upper(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME)),'PL_');-- Fix - SCR 0024 - Dass - 03-jan-2012
+			v_dcr_number         number := name_in(v_block_name||'.create_dcr_number');
+			v_processing_cycle number(6):= name_in(v_block_name||'.processing_cycle');
+			v_validate_ind  varchar2(1) := name_in(v_block_name||'.validate_ind');
+			v_status        varchar2(10):= :system.record_status;
+			
+		BEGIN
+			if v_status = 'CHANGED' then -- incase validate_ind is manualy modified by user
+				v_validate_ind := refresh_ml_utilities.get_validate_ind(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME),
+																							name_in(v_block_name||'.create_dcr_number'));
+			end if;
+    	if v_validate_ind in ('Y','S','H','O') then
+    		IF refresh_master_library.check_reference_info(v_block_name,'D') = 'N' THEN
+					raise form_trigger_failure;
+				END IF;																						
+			end if;
+			--
+			if v_validate_ind in ('Y','S','H','O') then
+				refresh_master_library.delete_from_ref_table(v_dcr_number);
+			end if;
+			--
+			IF :global.lib_refreshed = 'Y' and
+				v_processing_cycle IN (:global.new_processing_cycle,:global.old_processing_cycle) AND -- Fix - SCR 0024 - Dass - 03-jan-2012
+				v_validate_ind IN ('Y','S','H','O') THEN
+				refresh_master_library.refresh_a_record(p_table_type,v_dcr_number,v_processing_cycle,p_table_name,'I'); -- Fix - SCR 0024 - Dass - 03-jan-2012
+				delete_record; -- Fix - SCR 0024 - Dass - 03-jan-2012
+				commit_form;   -- Fix - SCR 0024 - Dass - 03-jan-2012
+				refresh_master_library.set_record_group(v_dcr_number,'I',v_block_name,v_processing_cycle,'D'); -- Added on 01/22/2004
+				dsp_msg('The refresh master library table for this deletion is done and all changes are commited.'); -- Fix - SCR 0024 - Dass - 03-jan-2012
+			ELSE
+				delete_record;
+			END IF;
+		END;
+		end if;
+		
+			--Begin Fix - SCR 5767 -Dass - 04-Oct-2012
+				Else
+		         	dsp_action_msg ('D',:parameter.record_type, name_in('global.dcr_number'),NVL(name_in(v_block_name||'.processing_cycle'),:global.processing_cycle));        
+				End If;
+				--End Fix - SCR 5767 -Dass - 04-Oct-2012	
+		else
+				if name_in(:system.cursor_block||'.validate_ind') in ('Y','S','H','O') then -- Fix - SCR 0024 - Dass - 03-jan-2012
+					refresh_master_library.delete_from_ref_table(name_in(:system.cursor_block||'.create_dcr_number')); -- Fix - SCR 0024 - Dass - 03-jan-2012
+				end if;
+				delete_record;		
+		end if;	
+	
+	END;
+END IF;
+
+ plStdContrlAirspaceCommMrwhenClearBlock:
+set_item_property('control_block.STD_VALIDATION_ERRORS_MR',VISIBLE,PROPERTY_FALSE);
+
+ plStdContrlAirspaceCommMrkeyDelrecPrev:
+IF :parameter.work_type = 'VIEW' then
+	null;	
+ELSE
+	if :system.record_status not in ('NEW','INSERT') then
+		if display_alert.more_buttons('S','Delete Record',
+							'You are going to delete this record. Please be sure.'||chr(10)||' ',
+						 'Delete It', 'Cancel') = 1 then
+			DECLARE
+				v_block_name    varchar2(30):= 'PL_STD_CONTRL_AIRSPACE_COMM_MR';		
+				v_dcr_number         number := :PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number;
+				v_processing_cycle number(6):= :PL_STD_CONTRL_AIRSPACE_COMM_MR.processing_cycle;
+				v_validate_ind  varchar2(1) := :PL_STD_CONTRL_AIRSPACE_COMM_MR.validate_ind;
+				v_status        varchar2(10):= :system.record_status;
+				v_table_type    varchar2(5) :='M2C';-- Fix - SCR 0024 - Dass - 03-jan-2012
+			BEGIN
+				if v_status = 'CHANGED' then
+					v_validate_ind := refresh_ml_utilities.get_validate_ind(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME),
+																							:PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number);
+				end if;
+				--
+    		if v_status != 'NEW' then
+    			if v_validate_ind in ('Y','S','H','O') then
+    				IF refresh_master_library.check_reference_info(v_block_name,'D') = 'N' THEN
+    					raise form_trigger_failure;
+						END IF;																						
+					end if;
+					--
+					IF :global.lib_refreshed = 'Y' and
+						v_processing_cycle in (:global.new_processing_cycle,:global.old_processing_cycle) and -- Fix - SCR 0024 - Dass - 03-jan-2012
+						v_validate_ind IN ('Y','S','H','O') THEN
+						refresh_master_library.refresh_a_record(v_table_type,v_dcr_number,v_processing_cycle,ltrim(upper(get_block_property(v_block_name,QUERY_DATA_SOURCE_NAME)),'PL_'),'I');-- Fix - SCR 0024 - Dass - 03-jan-2012
+						delete_record;-- Fix - SCR 0024 - Dass - 03-jan-2012
+						commit_form;-- Fix - SCR 0024 - Dass - 03-jan-2012
+						refresh_master_library.set_record_group(v_dcr_number,'I',v_block_name,v_processing_cycle,'U');
+						dsp_msg('The refresh master library table for this deletion is done and all changes are commited.');-- Fix - SCR 0024 - Dass - 03-jan-2012
+					else -- Fix - SCR 0024 - Dass - 03-jan-2012
+						delete_record;-- Fix - SCR 0024 - Dass - 03-jan-2012
+					END IF;
+					--
+					if v_validate_ind in ('Y','S','H','O') then
+						refresh_master_library.delete_from_ref_table(v_dcr_number);
+					end if;
+				end if;									
+			END;
+		end if;
+		else
+		if :PL_STD_CONTRL_AIRSPACE_COMM_MR.validate_ind in ('Y','S','H','O') then
+			refresh_master_library.delete_from_ref_table(:PL_STD_CONTRL_AIRSPACE_COMM_MR.create_dcr_number);
+		end if;
+		delete_record;
+	end if;	
+END IF;	
+
+
+
+ stdContrlAirspaceCommpreQuery:
+:std_contrl_airspace_comm.data_supplier    := :global.data_supplier;
+
+ displayItemBlockwhenNewItemInstance:
+
+
+ displayItemBlockwhenButtonPressed:
+declare
+	total_rows   number;
+	V_BUTTON     NUMBER(1);
+begin
+	if :system.form_status = 'CHANGED' then
+		dsp_msg('There is changes in the form, please do commit first.');
+	else	
+		total_rows := get_group_row_count(find_group('Refresh_Records_Group'));
+		v_button := display_alert.more_buttons('S','Refresh Record',
+								'You have modified or inserted or deleted '||total_rows||' record(s)*. '||chr(10)||
+						  	'Do you want to refresh the Master Library now?'||chr(10)||chr(10),
+						    'Refresh', 'Cancel');
+		if v_button = 1 then
+			refresh_master_library.refresh_records(total_rows);
+		else
+			null;
+		end if;
+	end if;	
+end;
+
+ controlBlockwhenButtonPressed:
+hide_view('STD_OVER');
+
+ webutilwhenButtonPressed:
+
+
+ webutilwhenCustomItemEvent:
+
+
+ItemlevelTriggers:
+ plStdContrlAirspaceCommMrprocessingCyclewhenValidateItem:
+if rtrim(:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE) is null then
+	:PL_STD_CONTRL_AIRSPACE_COMM_MR.PROCESSING_CYCLE := :global.processing_cycle;
+end if;	
+
+ displayItemBlockformPartNumberwhenNewItemInstance:
+
+
+ displayItemBlockrefreshButtonwhenButtonPressed:
+declare
+	total_rows   number;
+	V_BUTTON     NUMBER(1);
+begin
+	if :system.form_status = 'CHANGED' then
+		dsp_msg('There is changes in the form, please do commit first.');
+	else	
+		total_rows := get_group_row_count(find_group('Refresh_Records_Group'));
+		v_button := display_alert.more_buttons('S','Refresh Record',
+								'You have modified or inserted or deleted '||total_rows||' record(s)*. '||chr(10)||
+						  	'Do you want to refresh the Master Library now?'||chr(10)||chr(10),
+						    'Refresh', 'Cancel');
+		if v_button = 1 then
+			refresh_master_library.refresh_records(total_rows);
+		else
+			null;
+		end if;
+	end if;	
+end;
+
+ controlBlockstdOverideMrwhenButtonPressed:
+declare
+		v_item varchar2(50) := :system.cursor_item;
+begin
+	show_view('std_over');
+	go_item('CONTROL_BLOCK.STD_OVERRIDE_ERRORS');
+	go_item(v_item);
+end;	
+
+ controlBlockcloseStdOverridewhenButtonPressed:
+hide_view('STD_OVER');
+
+ webutildummywhenButtonPressed:
+
+
+ webutilwebutilClientinfoFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilFileFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilHostFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilSessionFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilFiletransferFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilOleFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilCApiFunctionswhenCustomItemEvent:
+
+
+ webutilwebutilBrowserFunctionswhenCustomItemEvent:
+
+

@@ -1,0 +1,3533 @@
+package com.honeywell.coreptdu.datatypes.navdbsetup.dto.response;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAirportDataDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAirportGroupDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAreaCodeChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAreaCodeDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAreaCodeGrandChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScAreaCodeValueDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScArptGrpChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScArptGrpDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScArptGrpGrandChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScArptGrpValueDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScIcaoChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScIcaoDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScIcaoGrandChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScIcaoValueDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScListCriteriaValuesDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.ScSupplementalDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaDccValueDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaDefaultCriteiriaChildDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaDefaultCriteiriaMasterDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaGeoArea;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaGeoAreaChildren;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaGeoAreaGccDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaGeoAreaGrandChildrenDTO;
+import com.honeywell.coreptdu.datatypes.navdbsetup.dto.report.SelectionCriteriaGeoAreaPointsDTO;
+import com.honeywell.coreptdu.global.forms.DbConstants;
+import com.honeywell.coreptdu.utils.dbutils.IApplication;
+import com.honeywell.coreptdu.utils.oracleutils.DuRecord;
+import com.honeywell.coreptdu.utils.oracleutils.GenericTemplateForm;
+import com.honeywell.coreptdu.utils.reportutils.IPdfReport;
+import com.honeywell.coreptdu.utils.reportutils.ReportConstants;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class SelectionCriteriaReport extends GenericTemplateForm<SelectionCriteriaReport>
+		implements IPdfReport, ReportConstants {
+
+	@Autowired
+	private IApplication app;
+
+
+
+	PDPageContentStream contentStream = null;
+	PDDocument document = null;
+	PDPage page = null;
+	float currentHeight = 0;
+	String cpNoneMessage = null;
+	String cpSupplier = null;
+	String navdb = null;
+	float contentStartHeight = 0;
+	float geographicStartHeight = 0f;
+	float areaCodeStartHeight = 0f;
+	float icaoStartHeight = 0f;
+	float airportGrpStartHeight = 0f;
+	float airportGrpListStartHeight = 0f;
+	boolean subTableRuleStart = false;
+
+	String BOTTOM = "BOTTOM";
+	String TOP = "TOP";
+	String BOTH = "BOTH";
+	String continueBlock = null;
+	String geoGraphicName = "";
+	String geoGraphicSubHeader = "";
+	String areaCodeName = "";
+	String areaCodeSubHeader = "";
+	String icaoCodeName = "";
+	String icaoCodeSubHeader = "";
+	String airportGrpName = "";
+	String airportGrpSubHeader = "";
+	String airportGrpIncexcl = "";
+	String airportGrpListName = "";
+	String recordsByListName = "";
+	List<String> labelsList = new ArrayList<>();
+	boolean inSelectRecordList = false;
+
+	private StringBuilder builder = new StringBuilder();
+	private String COMMA = ",";
+	private String NEWLINE = "\n";
+
+	public enum BLOCK {
+		DEFAULTCRITERIA, AIFRUNWAYLEN, RNP, SELECTIONGEOGRAPHICAREA, SELECTIONBYAREACODE, SELECTIONBYICAOCODE,
+		SELECTIONBYAIRPORTGROUP, AIRPORTGROUP, SELECTRECORDLIST;
+	}
+
+	@Override
+	public PDPageContentStream newPage(float height) throws IOException {
+		if (currentHeight - height <= MARGIN_BOTTOM_SEVENTY + 10) {
+			if (contentStartHeight != 0f) {
+				if (continueBlock.equals(BLOCK.AIRPORTGROUP.toString())) {
+					contentStream.setStrokingColor(0.48f);// black border
+					contentStream.setLineWidth(1.2f);// border thickness
+					contentStream.addRect(50f, currentHeight - 5f, 520f, contentStartHeight - currentHeight + 10f);
+					contentStream.stroke();
+					contentStream.setStrokingColor(0, 0, 0);
+				} else if (!inSelectRecordList && (contentStartHeight - currentHeight + 10f) > 15f) {
+					contentStream.setStrokingColor(0.48f);// black border
+					contentStream.setLineWidth(1.2f);// border thickness
+					contentStream.addRect(36f, currentHeight - 5f, 535.5f, contentStartHeight - currentHeight + 10f);
+					contentStream.stroke();
+					contentStream.setStrokingColor(0, 0, 0);
+				}
+			}
+			if (subTableRuleStart) {
+				contentStream.moveTo(68f, currentHeight); // Top border
+				contentStream.lineTo(565f, currentHeight);
+				contentStream.stroke();
+			}
+			if (continueBlock.equals(BLOCK.SELECTIONGEOGRAPHICAREA.toString())) {
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 5f, 493f, geographicStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0);
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYAREACODE.toString())) {
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 5f, 493f, areaCodeStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0);
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYICAOCODE.toString())) {
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 5f, 493f, icaoStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0);
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYAIRPORTGROUP.toString())) {
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 5f, 493f, airportGrpStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0);
+			} else if (continueBlock.equals(BLOCK.AIRPORTGROUP.toString())) {
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(50f, currentHeight - 5f, 520f, contentStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0);
+			}
+			contentStream.close();
+			// Create a new page
+			PDPage newPage = new PDPage(new PDRectangle(72 * 8.5f, 72 * 11f));
+			document.addPage(newPage);
+			contentStream = new PDPageContentStream(document, newPage);
+			// Reset yPosition for the new page
+			currentHeight = newPage.getMediaBox().getHeight();
+			onHeader();
+			resetHeight(12f);
+			contentStartHeight = currentHeight;
+			if (continueBlock.equals(BLOCK.DEFAULTCRITERIA.toString())) {
+				resetHeight(22f);
+				drawRowWithoutWrap(contentStream, 496f, 68f, new String[] { "Record Type", "Selection Rule" },
+						new float[] { 80f, 300f, 400f }, 10, HELVETICA_BOLD, null);
+			} else if (continueBlock.equals(BLOCK.SELECTIONGEOGRAPHICAREA.toString())) {
+				contentStartHeight = currentHeight;
+				print(contentStream, page, "Selection By Geographic Area", 50f, 14f, FONT);
+				resetHeight(15f);
+				geographicStartHeight = currentHeight;
+				if (geoGraphicName != null) {
+					print(contentStream, page, "Geographic Area Name:", 80f, 10f, HELVETICA_BOLD);
+					resetHeight(-11f);
+					printSameLine(contentStream, page, geoGraphicName, 207f, 10f, FONT);
+					resetHeight(25f);
+					if (geoGraphicSubHeader != null) {
+						if (geoGraphicSubHeader.equalsIgnoreCase("Seq #")) {
+							drawRowWithoutWrap(contentStream, 262f, 240f,
+									new String[] { "Seq #", "Latitude", "Longitude" }, new float[] { 282f, 317f, 413f },
+									10, HELVETICA_BOLD, null);
+						} else {
+							drawRowWithoutWrap(contentStream, 450f, 98f,
+									new String[] { "Record Type", "Selection Rule" }, new float[] { 108f, 325f, 425f },
+									10, HELVETICA_BOLD, null);
+							geoGraphicSubHeader = "New Page";
+						}
+
+					}
+				}
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYAREACODE.toString())) {
+				contentStartHeight = currentHeight;
+				print(contentStream, page, "Selection By Area Code", 50f, 14f, FONT);
+				resetHeight(15f);
+				areaCodeStartHeight = currentHeight;
+				if (areaCodeName != null) {
+					print(contentStream, page, "Area Code:", 80f, 10f, HELVETICA_BOLD);
+					resetHeight(-11f);
+					printSameLine(contentStream, page, areaCodeName, 145f, 10f, FONT);
+					resetHeight(25f);
+					if (!Objects.equals(areaCodeSubHeader, "")) {
+						drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+								new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+					}
+				}
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYICAOCODE.toString())) {
+				contentStartHeight = currentHeight;
+				print(contentStream, page, "Selection By ICAO Code", 50f, 14f, FONT);
+				resetHeight(15f);
+				icaoStartHeight = currentHeight;
+				if (icaoCodeName != null) {
+					print(contentStream, page, "Area Code:", 100f, 10f, HELVETICA_BOLD);
+					resetHeight(-11f);
+					printSameLine(contentStream, page, icaoCodeName, 225f, 10f, FONT);
+					resetHeight(25f);
+					if (!Objects.equals(icaoCodeSubHeader, "")) {
+						drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+								new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+					}
+				}
+			} else if (continueBlock.equals(BLOCK.SELECTIONBYAIRPORTGROUP.toString())) {
+				contentStartHeight = currentHeight;
+				resetHeight(-4f);
+				print(contentStream, page, "Selection By Airport Group", 50f, 14f, FONT);
+				resetHeight(-10f);
+				printSameLine(contentStream, page, "", 300f, 10f, FONT);
+				resetHeight(15f);
+				airportGrpStartHeight = currentHeight;
+				if (airportGrpName != null) {
+					print(contentStream, page, "Airport Group:", 80f, 10f, HELVETICA_BOLD);
+					resetHeight(-11f);
+					printSameLine(contentStream, page, airportGrpName, 161f, 10f, FONT);
+					printSameLine(contentStream, page, airportGrpIncexcl, 304f, 10f, FONT);
+					resetHeight(25f);
+				}
+			} else if (continueBlock.equals(BLOCK.AIRPORTGROUP.toString())) {
+				print(contentStream, page, "Airport Group - Airport List", 47f, 14f, FONT);
+				resetHeight(10f);
+				contentStartHeight = currentHeight;
+				print(contentStream, page, "Group Name: " + airportGrpListName, 58f, 10f, HELVETICA_BOLD);
+				resetHeight(5f);
+				printSameLine(contentStream, page, "Airports:", 85f, 10f, HELVETICA_BOLD);
+				drawRowWithoutWrap(contentStream, 423f, 135f,
+						new String[] { "Ident", DbConstants.ICAO, "ATA/IATA", "Name", "Std/Tld" },
+						new float[] { 144f, 184f, 215f, 273f, 520f }, 10, HELVETICA_BOLD, null);
+			} else if (continueBlock.equals(BLOCK.SELECTRECORDLIST.toString())) {
+				print(contentStream, page, "Select Records by List", 55f, 14f, FONT);
+				resetHeight(5f);
+				print(contentStream, page, recordsByListName, 98f, 10f, HELVETICA_BOLD);
+				resetHeight(5f);
+				if(!recordsByListName.isEmpty()) {					
+					drawRowWithWrapColumnLine(contentStream, labelsList.size() * 80f, 135f,
+							labelsList.toArray(new String[0]), getColumnLabelSize(labelsList.size()),
+							getColumnAligment(labelsList.size()), getColumnLine(labelsList.size()), 10, HELVETICA_BOLD);
+				}
+			}
+			if (subTableRuleStart) {
+				contentStream.moveTo(98f, currentHeight); // Top border
+				contentStream.lineTo(548f, currentHeight);
+				contentStream.stroke();
+			}
+
+		}
+		return contentStream;
+	}
+
+	@Override
+	public void initializeReport() throws IOException {
+
+		document = new PDDocument();
+		// Create a page
+		page = new PDPage(new PDRectangle(72 * 8.5f, 72 * 11f));
+		document.addPage(page);
+		contentStream = new PDPageContentStream(document, page);
+		float yStart = page.getMediaBox().getHeight();
+		currentHeight = yStart;
+	}
+
+	@Override
+	public void onHeader() throws IOException {
+		resetHeight(18f);
+		print(contentStream, page, "Selection Criteria for NAVDB:  " + navdb, 36f, 15, COURIER_BOLD);
+		resetHeight(14f);
+		print(contentStream, page, "As Of:  " + curentDate(), 203f, 12, COURIER_BOLD);
+	}
+
+	@Override
+	public void onFooter() throws IOException {
+
+		Integer totalPages = document.getNumberOfPages();
+		Integer curentPage = 1;
+		for (PDPage page : document.getPages()) {
+			addPageNumber(curentPage, totalPages, page, FONT);
+			curentPage++;
+		}
+	}
+
+	private void resetHeight(float height) throws IOException {
+
+		currentHeight -= height;
+	}
+
+	public void addPageNumber(Integer curentPage, Integer totalPages, PDPage page, PDFont font) throws IOException {
+		PDPageContentStream contentStream = new PDPageContentStream(document, page, AppendMode.APPEND, true, true);
+		contentStream.setFont(font, 10);
+
+		contentStream.beginText();
+		contentStream.newLineAtOffset(512f, 778f);
+		contentStream.showText("Page " + curentPage + " of " + totalPages);
+		contentStream.endText();
+		contentStream.close();
+	}
+
+	public void print(PDPageContentStream contentStream, PDPage page, String text, float x, float fontSize, PDFont font)
+			throws IOException {
+		log.debug(contentStream.toString());
+		contentStream = newPage(2 * (fontSize + 2));
+		contentStream.setFont(font, fontSize);
+
+		contentStream.beginText();
+		contentStream.newLineAtOffset(x, currentHeight - fontSize + 2);
+		contentStream.showText(text);
+		contentStream.endText();
+
+		currentHeight -= fontSize + 2;
+	}
+
+	public void drawRowWithWrap(PDPageContentStream contentStream, float x, float offset, String[] columns,
+			float[] columnSizes, String[] alignment, int fontSize, PDFont font, String removeHorizontal)
+			throws IOException {
+		int i = 0;
+		float vheight = 0f;
+		contentStream.setFont(font, fontSize);
+
+		List<List<String>> texts = new ArrayList<>();
+		for (String str : columns) {
+
+			List<String> lines = wrapText(str, FONT, fontSize, columnSizes[i + 1] - columnSizes[i]);
+			if (vheight < (lines.size() * (fontSize + 2))) {
+				vheight = lines.size() * (fontSize + 2);
+			}
+			texts.add(lines);
+		}
+		// buffer space
+		vheight += 2f;
+		contentStream = newPage(vheight);
+		contentStream.setFont(FONT, fontSize);
+		// Draw the top and bottom horizontal borders
+		int col = 0;
+		for (List<String> lines : texts) {
+			float columnWidth = columnSizes[col + 1] - columnSizes[col];
+			int lineno = 1;
+			for (String line : lines) {
+				float lineWidth = FONT.getStringWidth(line) / 1000 * fontSize;
+
+				// Calculate alignment offset
+				float textOffsetX = 0;
+				switch (alignment[col]) {
+				case "center":
+					textOffsetX = (columnWidth - lineWidth) / 2;
+					break;
+				case "end":
+					textOffsetX = columnWidth - lineWidth;
+					break;
+				case "start":
+				default:
+					textOffsetX = 0;
+					break;
+				}
+				contentStream.beginText();
+				contentStream.newLineAtOffset(columnSizes[col] + textOffsetX, currentHeight - (lineno * (fontSize)));
+				contentStream.showText(line);
+				contentStream.endText();
+				lineno++;
+			}
+			col++;
+		}
+
+		// Draw vertical borders at the start and end of the row
+		contentStream.setStrokingColor(0.48f); // set border color as gray
+		contentStream.moveTo(offset, currentHeight);
+		contentStream.lineTo(offset, currentHeight - vheight); // Left vertical border
+		contentStream.stroke();
+
+		// Draw vertical borders at the start and end of the row
+		contentStream.moveTo(offset + x, currentHeight);
+		contentStream.lineTo(offset + x, currentHeight - vheight); // Right vertical border
+		contentStream.stroke();
+
+		contentStream.setStrokingColor(0, 0, 0); // reset to black
+
+		// Draw the top and bottom horizontal borders
+		if (!Objects.equals(removeHorizontal, BOTH)) {
+			if (!Objects.equals(removeHorizontal, BOTTOM)) {
+				// Draw the top and bottom horizontal borders
+				contentStream.moveTo(offset, currentHeight - vheight); // Top border
+				contentStream.lineTo(offset + x, currentHeight - vheight);
+				contentStream.stroke();
+			}
+			if (!Objects.equals(removeHorizontal, TOP)) {
+				contentStream.moveTo(offset, currentHeight); // Top border
+				contentStream.lineTo(offset + x, currentHeight);
+				contentStream.stroke();
+			}
+		}
+		currentHeight -= vheight;
+	}
+
+		public void drawRowWithWrapColumnLine(PDPageContentStream contentStream, float x, float offset, String[] columns,
+			float[] columnSizes, String[] alignment, float[] columnLine, int fontSize, PDFont font) throws IOException {
+		int i = 0;
+		float vheight = 0f;
+		contentStream.setFont(font, fontSize);
+
+		List<List<String>> texts = new ArrayList<>();
+		for (String str : columns) {
+
+			List<String> lines = wrapText(str, font, fontSize, columnSizes[i + 1] - columnSizes[i]);
+			if (vheight < (lines.size() * (fontSize + 2))) {
+				vheight = lines.size() * (fontSize + 2);
+			}
+			texts.add(lines);
+		}
+		// buffer space
+		vheight += 2f;
+		contentStream = newPage(vheight);
+		contentStream.setFont(font, fontSize);
+		// Draw the top and bottom horizontal borders
+		contentStream.moveTo(offset, currentHeight); // Top border
+		contentStream.lineTo(offset + x, currentHeight);
+		contentStream.stroke();
+		int col = 0;
+		for (List<String> lines : texts) {
+			float columnWidth = columnSizes[col + 1] - columnSizes[col];
+			int lineno = 1;
+			for (String line : lines) {
+				float lineWidth = font.getStringWidth(line) / 1000 * fontSize;
+
+				// Calculate alignment offset
+				float textOffsetX = 0;
+				switch (alignment[col]) {
+				case "center":
+					textOffsetX = (columnWidth - lineWidth) / 2;
+					break;
+				case "end":
+					textOffsetX = columnWidth - lineWidth;
+					break;
+				case "start":
+				default:
+					textOffsetX = 0;
+					break;
+				}
+				contentStream.beginText();
+				contentStream.newLineAtOffset(columnSizes[col] + textOffsetX, currentHeight - (lineno * (fontSize)));
+				contentStream.showText(line);
+				contentStream.endText();
+				lineno++;
+			}
+			col++;
+		}
+
+		// Draw vertical borders at the start and end of the row
+		contentStream.moveTo(offset, currentHeight);
+		contentStream.lineTo(offset, currentHeight - vheight); // Left vertical border
+		contentStream.stroke();
+
+		// Draw vertical borders at the start and end of the row
+		contentStream.moveTo(offset + x, currentHeight);
+		contentStream.lineTo(offset + x, currentHeight - vheight); // Right vertical border
+		contentStream.stroke();
+		// to draw line for each column
+		for (float line : columnLine) {
+			contentStream.moveTo(offset + line, currentHeight);
+			contentStream.lineTo(offset + line, currentHeight - vheight); // Right vertical border
+			contentStream.stroke();
+		}
+
+		// Draw the top and bottom horizontal borders
+		contentStream.moveTo(offset, currentHeight - vheight); // Top border
+		contentStream.lineTo(offset + x, currentHeight - vheight);
+		contentStream.stroke();
+
+		currentHeight -= vheight;
+	}
+
+	public void drawRowWithoutWrap(PDPageContentStream contentStream, float x, float offset, String[] columns,
+			float[] columnSizes, int fontSize, PDFont font, String removeHorizontal) throws IOException {
+		int i = 0;
+		float vheight = fontSize + 4;
+		log.debug(contentStream.toString());
+		contentStream = newPage(vheight);
+		contentStream.setFont(font, fontSize);
+		for (String str : columns) {
+			contentStream.setFont(font, fontSize);
+			contentStream.beginText();
+			contentStream.newLineAtOffset(columnSizes[i], currentHeight - (vheight * 3 / 4));
+			contentStream.showText(str);
+			contentStream.endText();
+			i++;
+		}
+
+		if (removeHorizontal != "ALL") {
+			// Draw vertical borders at the start and end of the row
+			contentStream.moveTo(offset, currentHeight);
+			contentStream.lineTo(offset, currentHeight - vheight); // Left vertical border
+			contentStream.setStrokingColor(0.48f);
+			contentStream.stroke();
+
+			// Draw vertical borders at the start and end of the row
+			contentStream.moveTo(offset + x, currentHeight);
+			contentStream.lineTo(offset + x, currentHeight - vheight); // Right vertical border
+			contentStream.setStrokingColor(0.48f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset to black
+		}
+		if (!Objects.equals(removeHorizontal, BOTH) && !Objects.equals(removeHorizontal, "ALL")) {
+			if (!Objects.equals(removeHorizontal, BOTTOM)) {
+				// Draw the top and bottom horizontal borders
+				contentStream.moveTo(offset, currentHeight - vheight); // Top border
+				contentStream.lineTo(offset + x, currentHeight - vheight);
+				contentStream.stroke();
+			}
+			if (!Objects.equals(removeHorizontal, TOP)) {
+				contentStream.moveTo(offset, currentHeight); // Top border
+				contentStream.lineTo(offset + x, currentHeight);
+				contentStream.stroke();
+			}
+		}
+
+		currentHeight -= vheight;
+	}
+
+	private List<String> wrapText(String text, PDFont font, float fontSize, float maxWidth) throws IOException {
+		List<String> lines = new ArrayList<>();
+		StringBuilder currentLine = new StringBuilder();
+		float spaceWidth = font.getStringWidth(" ") / 1000 * fontSize;
+
+		for (String word : text.split(" ")) {
+			float currentLineWidth = font.getStringWidth(currentLine + word) / 1000 * fontSize;
+			if (currentLineWidth + spaceWidth > maxWidth) {
+				lines.add(currentLine.toString());
+				currentLine = new StringBuilder(word); // Start a new line
+			} else {
+				if (currentLine.length() > 0)
+					currentLine.append(" ");
+				currentLine.append(word);
+			}
+		}
+		if (currentLine.length() > 0) {
+			lines.add(currentLine.toString());
+		}
+
+		return lines;
+	}
+
+	private String curentDate() {
+		LocalDateTime now = LocalDateTime.now();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm:ss a");
+		String formattedDateTime = now.format(formatter).toUpperCase();
+		return formattedDateTime.substring(0, formattedDateTime.length() - 1) + "."
+				+ formattedDateTime.charAt(formattedDateTime.length() - 1) + ".";
+	}
+
+	public byte[] genReport(IApplication appl, Integer pCycle, String pNavdbId) throws SQLException, IOException {
+		try {
+			app = appl;
+			navdb = pNavdbId;
+
+			String aifRwyLimit = "select nvl(to_char(aif_rwy_length_limit),'None Selected') aif_rwy_length_limit from navdb where navdb_id = ?";
+			String airportData = """
+					   			select airport_ident, airport_icao,
+					          ata_iata_designator, airport_name, 'Std' type
+					from pl_std_airport a, navdb b
+					where processing_cycle = ?
+					and navdb_id = ?
+					and    a.data_supplier = b.data_supplier
+					union
+					select airport_ident, airport_icao,
+					          ata_iata_designator, airport_name, 'Tld' type
+					from   pl_tld_airport a, navdb b
+					where processing_cycle = ?
+					and customer_ident = ?
+					and navdb_id = ?
+					and    a.data_supplier = b.data_supplier
+					   			""";
+			String airportGroups = """
+					   			select a.select_by_id al_selbyid, a.navdb_id al_navdbid, a.group_name,
+					          b.airport_ident al_airport_ident, b.airport_icao al_airport_icao
+					from    select_by_airport_group a, airport_to_select b
+					where  a.navdb_id = ?
+					and     a.select_by_id = b.select_by_id
+					order by 3, 5, 4
+					   			""";
+
+			String areaCode = """
+					   			select  select_by_id ac_selbyid,
+					        area_code  ac_area_code,
+					        include_exclude_ind ac_incexcl
+					from    select_by_area
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String areaCodeChildren = """
+					   			select a.select_by_id acc_select_by_id, a.record_type_code acc_record_type_code,
+					       a.criteria_id acc_criteria_id, a.include_exclude_ind acc_incexcl,
+					       b.criteria_descr acc_criteria_desc, c.record_type_descr acc_record_type_descr, a.area_code_id acc_area_code_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+			String areaCodeGrandChildren = """
+					   			select a.select_by_id accc_sel_by_id, a.record_type_code accc_rec_type_code,
+					       a.criteria_id accc_crit_id, a.include_exclude_ind accc_inc_excl_ind,
+					       b.criteria_descr accc_crit_desc, c.record_type_descr accc_rec_type_descr,
+					       a.parent_select_by_id accc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String areaCodeValue = """
+					   			select select_by_id acccv_sel_by_id, value_descr acccv_value_descr,
+					          value acccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String arptGrp = """
+					   			select  select_by_id ag_selbyid,
+					        group_name  ag_group_name,
+					        include_exclude_ind ag_incexcl
+					from    select_by_airport_group
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String arptGrpChildren = """
+					   			select a.select_by_id agc_select_by_id, a.record_type_code agc_record_type_code,
+					       a.criteria_id agc_criteria_id, a.include_exclude_ind agc_incexcl,
+					       b.criteria_descr agc_criteria_desc, c.record_type_descr agc_record_type_descr, a.airport_group_id agc_airport_group_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String arptGrpGrandChildren = """
+					   			select a.select_by_id agcc_sel_by_id, a.record_type_code agcc_rec_type_code,
+					       a.criteria_id agcc_crit_id, a.include_exclude_ind agcc_inc_excl_ind,
+					       b.criteria_descr agcc_crit_desc, c.record_type_descr agcc_rec_type_descr,
+					       a.parent_select_by_id agcc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = :p_navdbid
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String arptGrpValue = """
+					   			select select_by_id agccv_sel_by_id, value_descr agccv_value_descr,
+					          value agccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String dccValue = """
+					   			select select_by_id dccv_sel_by_id, value_descr dccv_value_descr,
+					          value dccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String defaultCriteria = """
+					   			select a.select_by_id, a.record_type_code, a.criteria_id, a.include_exclude_ind,
+					          b.criteria_descr, c.record_type_descr
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    geo_area_id = -1
+					and    parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					order by 2
+
+					   			""";
+			String defaultCritChildren = """
+					   			select a.select_by_id dcc_sel_by_id, a.record_type_code dcc_rec_type_code,           a.criteria_id dcc_crit_id,
+					         a.include_exclude_ind dcc_inc_excl_ind,
+					          b.criteria_descr dcc_crit_desc, c.record_type_descr dcc_rec_type_descr, a.parent_select_by_id dcc_parent_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    geo_area_id = -1
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					and   a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String geoArea = """
+					   			select select_by_id g_selbyid,
+					           geo_area_name  g_geo_aria_name,
+					           include_exclude_ind g_incexcl
+					from    select_by_geographic_area
+					where  navdb_id = :p_navdbid
+					order by 1
+					   			""";
+
+			String geoChildren = """
+					   			select a.select_by_id gc_select_by_id, a.record_type_code gc_record_type_code, a.criteria_id gc_criteria_id, a.include_exclude_ind gc_incexcl,
+					          b.criteria_descr gc_criteria_desc, c.record_type_descr gc_record_type_descr, a.geo_area_id gc_geo_area_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String geoGrandChildren = """
+					   			select a.select_by_id gcc_sel_by_id, a.record_type_code gcc_rec_type_code,           a.criteria_id gcc_crit_id,
+					         a.include_exclude_ind gcc_inc_excl_ind,
+					          b.criteria_descr gcc_crit_desc, c.record_type_descr gcc_rec_type_descr, a.parent_select_by_id gcc_parent_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					and   a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String geoGrandChildrenValue = """
+					   			select select_by_id gccv_sel_by_id, value_descr gccv_value_descr,
+					          value gccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String geoPoints = """
+					   			select select_by_id geop_selbyid,
+					           sequence_number geop_seqn,
+					           latitude g_latitude,
+					           longitude g_longitude
+					from    geographic_area_point
+					order by 2
+					   			""";
+
+			String icao = """
+					   			select  select_by_id ic_selbyid,
+					        icao_code  ic_icao_code,
+					        include_exclude_ind ic_incexcl
+					from    select_by_icao
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String icaoChildren = """
+					   			select a.select_by_id icc_select_by_id, a.record_type_code icc_record_type_code,
+					       a.criteria_id icc_criteria_id, a.include_exclude_ind icc_incexcl,
+					       b.criteria_descr icc_criteria_desc, c.record_type_descr icc_record_type_descr, a.icao_code_id icc_icao_code_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String icaoGrandChildren = """
+					   			select a.select_by_id iccc_sel_by_id, a.record_type_code iccc_rec_type_code,
+					       a.criteria_id iccc_crit_id, a.include_exclude_ind iccc_inc_excl_ind,
+					       b.criteria_descr iccc_crit_desc, c.record_type_descr iccc_rec_type_descr,
+					       a.parent_select_by_id iccc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String icaoValue = """
+					   			select select_by_id icccv_sel_by_id, value_descr icccv_value_descr,
+					          value icccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String listCriteriaValues = """
+					   			select a.select_by_id lv_selbyid, a.record_type_code lv_rectypecode, a.include_exclude_ind lv_incexcl,
+					       b.value_seq lv_seq, b.value lv_value,
+					       c.identifier_label lv_label, d.record_type_descr lv_record_descr
+					from   navdb_select_criteria a,
+					         selection_criteria_value b,
+					         record_identifier  c,
+					         record_type  d
+					where  a.navdb_id = ?
+					and     a.geo_area_id = -2
+					and     a.select_by_id = b.select_by_id
+					and    a.record_type_code = c.record_type_code
+					and    a.record_type_code = d.record_type_code
+					and    b.value_descr = c.identifier_column_name
+					order by 1, 2, 3
+					   			""";
+
+			String supplemental = """
+					   			select a.select_by_id sup_selbyid, a.record_type_code sup_rtc, a.criteria_id sup_criteria_id,
+					          decode(a.include_exclude_ind, 'I','Include',null) sup_incexci,
+					          b.criteria_descr sup_criteria_descr, c.record_type_descr sup_rec_descr
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.criteria_id in (select criteria_id from select_criteria where criteria_descr like '%SUPPL%')
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.geo_area_id = -1
+					order by 2
+					   			""";
+
+			List<DuRecord> aifRwyLimitResult = app.executeQuery(aifRwyLimit, pNavdbId);
+			List<DuRecord> airportDataResult = app.executeQuery(airportData, pCycle, pNavdbId, pCycle, pNavdbId,
+					pNavdbId);
+			List<DuRecord> airportGroupsResult = app.executeQuery(airportGroups, pNavdbId);
+			List<DuRecord> areaCodeResult = app.executeQuery(areaCode, pNavdbId);
+			List<DuRecord> areaCodeChildrenResult = app.executeQuery(areaCodeChildren, pNavdbId);
+			List<DuRecord> areaCodeGrandChildrenResult = app.executeQuery(areaCodeGrandChildren, pNavdbId);
+			List<DuRecord> areaCodeValueResult = app.executeQuery(areaCodeValue);
+			List<DuRecord> arptGrpResult = app.executeQuery(arptGrp, pNavdbId);
+			List<DuRecord> arptGrpChildrenResult = app.executeQuery(arptGrpChildren, pNavdbId);
+			List<DuRecord> arptGrpGrandChildrenResult = app.executeQuery(arptGrpGrandChildren, pNavdbId);
+			List<DuRecord> arptGrpValueResult = app.executeQuery(arptGrpValue);
+			List<DuRecord> dccValueResult = app.executeQuery(dccValue);
+			List<DuRecord> defaultCriteriaResult = app.executeQuery(defaultCriteria, pNavdbId);
+			List<DuRecord> defaultCritChildrenResult = app.executeQuery(defaultCritChildren, pNavdbId);
+			List<DuRecord> geoAreaResult = app.executeQuery(geoArea, pNavdbId);
+			List<DuRecord> geoChildrenResult = app.executeQuery(geoChildren, pNavdbId);
+			List<DuRecord> geoGrandChildrenResult = app.executeQuery(geoGrandChildren, pNavdbId);
+			List<DuRecord> geoGrandChildrenValueResult = app.executeQuery(geoGrandChildrenValue);
+			List<DuRecord> geoPointsResult = app.executeQuery(geoPoints);
+			List<DuRecord> icaoResult = app.executeQuery(icao, pNavdbId);
+			List<DuRecord> icaoChildrenResult = app.executeQuery(icaoChildren, pNavdbId);
+			List<DuRecord> icaoGrandChildrenResult = app.executeQuery(icaoGrandChildren, pNavdbId);
+			List<DuRecord> icaoValueResult = app.executeQuery(icaoValue);
+			List<DuRecord> listCriteriaValuesResult = app.executeQuery(listCriteriaValues, pNavdbId);
+			List<DuRecord> supplementalResult = app.executeQuery(supplemental, pNavdbId);
+
+			List<SelectionCriteriaDefaultCriteiriaMasterDTO> defaultCriteriaResultInr = new ArrayList<>();
+			List<SelectionCriteriaDefaultCriteiriaChildDTO> defaultCriteriaChildList = new ArrayList<>();
+			List<SelectionCriteriaDccValueDTO> defaultCriteriaDccList = new ArrayList<>();
+			List<SelectionCriteriaGeoArea> geoAreaList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaChildren> geoAreaChildList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaGrandChildrenDTO> geoAreaGrandChildList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaGccDTO> geoAreaDccList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaPointsDTO> geoAreaPointsList = new ArrayList<>();
+			List<ScSupplementalDTO> suppDtoList = new ArrayList<>();
+			List<ScAirportDataDTO> airportDtoList = new ArrayList<>();
+			List<ScAirportGroupDTO> airportGrpList = new ArrayList<>();
+			List<ScArptGrpDTO> arptGrpDTOList = new ArrayList<>();
+			List<ScArptGrpChildrenDTO> arptGrpChildrenDTOList = new ArrayList<>();
+			List<ScArptGrpGrandChildrenDTO> arptGrpGrandChildrenList = new ArrayList<>();
+			List<ScArptGrpValueDTO> arptGrpValueList = new ArrayList<>();
+			List<ScAreaCodeDTO> areaCodeList = new ArrayList<>();
+			List<ScAreaCodeChildrenDTO> areaCodeChildList = new ArrayList<>();
+			List<ScAreaCodeGrandChildrenDTO> areaCodeGrandChildList = new ArrayList<>();
+			List<ScAreaCodeValueDTO> areaCodeValueList = new ArrayList<>();
+			List<ScIcaoDTO> icaoList = new ArrayList<>();
+			List<ScIcaoChildrenDTO> icaoChildList = new ArrayList<>();
+			List<ScIcaoGrandChildrenDTO> icaoGrandChildList = new ArrayList<>();
+			List<ScIcaoValueDTO> icaoValueList = new ArrayList<>();
+			List<ScListCriteriaValuesDTO> listCriteriaValueList = new ArrayList<>();
+
+			for (DuRecord rec : defaultCriteriaResult) {
+				SelectionCriteriaDefaultCriteiriaMasterDTO cr = app.mapResultSetToClass(rec,
+						SelectionCriteriaDefaultCriteiriaMasterDTO.class);
+				if (cr != null) {
+					defaultCriteriaResultInr.add(cr);
+				}
+			}
+			for (DuRecord rec : defaultCritChildrenResult) {
+				SelectionCriteriaDefaultCriteiriaChildDTO cr = app.mapResultSetToClass(rec,
+						SelectionCriteriaDefaultCriteiriaChildDTO.class);
+				defaultCriteriaChildList.add(cr);
+			}
+
+			for (DuRecord rec : dccValueResult) {
+				SelectionCriteriaDccValueDTO cr = app.mapResultSetToClass(rec, SelectionCriteriaDccValueDTO.class);
+				defaultCriteriaDccList.add(cr);
+			}
+
+			for (DuRecord rec : geoAreaResult) {
+				SelectionCriteriaGeoArea geoAreadto = app.mapResultSetToClass(rec, SelectionCriteriaGeoArea.class);
+				geoAreaList.add(geoAreadto);
+			}
+
+			for (DuRecord rec : geoChildrenResult) {
+				SelectionCriteriaGeoAreaChildren child = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaChildren.class);
+				geoAreaChildList.add(child);
+			}
+
+			for (DuRecord rec : geoGrandChildrenResult) {
+				SelectionCriteriaGeoAreaGrandChildrenDTO grandChild = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaGrandChildrenDTO.class);
+				if (grandChild.getGccParentId() != null) {
+					geoAreaGrandChildList.add(grandChild);
+				}
+			}
+
+			for (DuRecord rec : geoGrandChildrenValueResult) {
+				SelectionCriteriaGeoAreaGccDTO dccList = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaGccDTO.class);
+				geoAreaDccList.add(dccList);
+			}
+
+			for (DuRecord rec : geoPointsResult) {
+				SelectionCriteriaGeoAreaPointsDTO geoPointsdto = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaPointsDTO.class);
+				geoAreaPointsList.add(geoPointsdto);
+			}
+
+			for (DuRecord rec : supplementalResult) {
+				ScSupplementalDTO supp = app.mapResultSetToClass(rec, ScSupplementalDTO.class);
+				suppDtoList.add(supp);
+			}
+
+			for (DuRecord rec : airportDataResult) {
+				ScAirportDataDTO airport = app.mapResultSetToClass(rec, ScAirportDataDTO.class);
+				airportDtoList.add(airport);
+			}
+
+			for (DuRecord rec : airportGroupsResult) {
+				ScAirportGroupDTO grp = app.mapResultSetToClass(rec, ScAirportGroupDTO.class);
+				airportGrpList.add(grp);
+			}
+
+			for (DuRecord rec : arptGrpResult) {
+				ScArptGrpDTO grpDto = app.mapResultSetToClass(rec, ScArptGrpDTO.class);
+				arptGrpDTOList.add(grpDto);
+			}
+
+			for (DuRecord rec : arptGrpChildrenResult) {
+				ScArptGrpChildrenDTO child = app.mapResultSetToClass(rec, ScArptGrpChildrenDTO.class);
+				arptGrpChildrenDTOList.add(child);
+			}
+
+			for (DuRecord rec : arptGrpGrandChildrenResult) {
+				ScArptGrpGrandChildrenDTO child = app.mapResultSetToClass(rec, ScArptGrpGrandChildrenDTO.class);
+				if (child.getAgccParentId() != null) {
+					arptGrpGrandChildrenList.add(child);
+				}
+			}
+
+			for (DuRecord rec : arptGrpValueResult) {
+				ScArptGrpValueDTO data = app.mapResultSetToClass(rec, ScArptGrpValueDTO.class);
+				arptGrpValueList.add(data);
+			}
+
+			for (DuRecord rec : areaCodeResult) {
+				ScAreaCodeDTO area = app.mapResultSetToClass(rec, ScAreaCodeDTO.class);
+				areaCodeList.add(area);
+			}
+
+			for (DuRecord rec : areaCodeChildrenResult) {
+				ScAreaCodeChildrenDTO child = app.mapResultSetToClass(rec, ScAreaCodeChildrenDTO.class);
+				areaCodeChildList.add(child);
+			}
+
+			for (DuRecord rec : areaCodeGrandChildrenResult) {
+				ScAreaCodeGrandChildrenDTO child = app.mapResultSetToClass(rec, ScAreaCodeGrandChildrenDTO.class);
+				if (child.getAcccParentId() != null) {
+					areaCodeGrandChildList.add(child);
+				}
+			}
+
+			for (DuRecord rec : areaCodeValueResult) {
+				ScAreaCodeValueDTO codeValue = app.mapResultSetToClass(rec, ScAreaCodeValueDTO.class);
+				areaCodeValueList.add(codeValue);
+			}
+
+			for (DuRecord rec : icaoResult) {
+				ScIcaoDTO icaodto = app.mapResultSetToClass(rec, ScIcaoDTO.class);
+				icaoList.add(icaodto);
+			}
+
+			for (DuRecord rec : icaoChildrenResult) {
+				ScIcaoChildrenDTO child = app.mapResultSetToClass(rec, ScIcaoChildrenDTO.class);
+				icaoChildList.add(child);
+			}
+
+			for (DuRecord rec : icaoGrandChildrenResult) {
+				ScIcaoGrandChildrenDTO grandChild = app.mapResultSetToClass(rec, ScIcaoGrandChildrenDTO.class);
+				if (grandChild.getIcccParentId() != null) {
+					icaoGrandChildList.add(grandChild);
+				}
+			}
+
+			for (DuRecord rec : icaoValueResult) {
+				ScIcaoValueDTO icaoVal = app.mapResultSetToClass(rec, ScIcaoValueDTO.class);
+				icaoValueList.add(icaoVal);
+			}
+
+			for (DuRecord rec : listCriteriaValuesResult) {
+				ScListCriteriaValuesDTO value = app.mapResultSetToClass(rec, ScListCriteriaValuesDTO.class);
+				listCriteriaValueList.add(value);
+			}
+
+			for (ScAirportGroupDTO grp : airportGrpList) {
+				ScAirportDataDTO data = airportDtoList.stream()
+						.filter(p -> p.getAirportIdent().equalsIgnoreCase(grp.getAlAirportIdent())).findFirst()
+						.orElse(null);
+				if (data != null) {
+					grp.setAtaIata(data.getAtaIataDesignator());
+					grp.setName(data.getAirportName());
+					grp.setStdTld(data.getType());
+				}
+			}
+
+			for (SelectionCriteriaDefaultCriteiriaMasterDTO defCrit : defaultCriteriaResultInr) {
+				List<SelectionCriteriaDefaultCriteiriaChildDTO> childList = defaultCriteriaChildList.parallelStream()
+						.sequential()
+						.filter(child -> child.getDccRecTypeDescr().equalsIgnoreCase(defCrit.getRecordTypeDescr())) // child.getDccParentId()==defCrit.getSelectById()
+																													// &&
+						.collect(Collectors.toList());
+				List<SelectionCriteriaDefaultCriteiriaChildDTO> dccList = new ArrayList<>();
+				for (SelectionCriteriaDefaultCriteiriaChildDTO child : childList) {
+
+					List<SelectionCriteriaDccValueDTO> dccData = defaultCriteriaDccList.parallelStream().sequential()
+							.filter(dcc -> dcc.getDccvSelById().equals(child.getDccSelById()))
+							.collect(Collectors.toList());
+					if (dccData.size() == 1) {
+						SelectionCriteriaDefaultCriteiriaChildDTO dccDto = new SelectionCriteriaDefaultCriteiriaChildDTO();
+						dccDto.setDccCritDesc(child.getDccCritDesc());
+						dccDto.setDccCritId(child.getDccCritId());
+						dccDto.setDccIncExclInd(child.getDccIncExclInd());
+						dccDto.setDccParentId(child.getDccParentId());
+						dccDto.setDccRecTypeCode(child.getDccRecTypeCode());
+						dccDto.setDccRecTypeDescr(child.getDccRecTypeDescr());
+						dccDto.setDccSelById(child.getDccSelById());
+						dccDto.setDccValue(dccData.get(0).getDccvValue());
+						dccList.add(dccDto);
+					} else if (dccData.size() > 1) {
+						int i = 1;
+						for (SelectionCriteriaDccValueDTO dcc : dccData) {
+							SelectionCriteriaDefaultCriteiriaChildDTO dccDto = new SelectionCriteriaDefaultCriteiriaChildDTO();
+							dccDto.setDccCritDesc(child.getDccCritDesc());
+							dccDto.setDccCritId(child.getDccCritId());
+							dccDto.setDccIncExclInd(i > 1 ? "" : child.getDccIncExclInd());
+							dccDto.setDccParentId(child.getDccParentId());
+							dccDto.setDccRecTypeCode(child.getDccRecTypeCode());
+							dccDto.setDccRecTypeDescr(child.getDccRecTypeDescr());
+							dccDto.setDccSelById(child.getDccSelById());
+							dccDto.setDccValue(dcc.getDccvValue());
+							dccList.add(dccDto);
+							i++;
+						}
+					} else if (dccData.size() == 0) {
+						dccList.add(child);
+					}
+				}
+				defCrit.setDefaultCriteiriaChild(dccList);
+			}
+			for (SelectionCriteriaGeoArea geo : geoAreaList) {
+				List<SelectionCriteriaGeoAreaChildren> childData = geoAreaChildList.parallelStream().sequential()
+						.filter(child -> child.getGcGeoAreaId() != null
+								&& (child.getGcGeoAreaId().equals(geo.getGSelbyid())))
+						.collect(Collectors.toList());
+				for (SelectionCriteriaGeoAreaChildren child : childData) {
+					List<SelectionCriteriaGeoAreaGrandChildrenDTO> grandChild = geoAreaGrandChildList.parallelStream()
+							.sequential().filter(grand -> grand.getGccParentId().equals(child.getGcSelectById()))
+							.collect(Collectors.toList());
+					List<SelectionCriteriaGeoAreaGrandChildrenDTO> grandData = new ArrayList<>();
+					for (SelectionCriteriaGeoAreaGrandChildrenDTO grand : grandChild) {
+						List<SelectionCriteriaGeoAreaGccDTO> gccDto = geoAreaDccList.parallelStream().sequential()
+								.filter(gcc -> gcc.getGccvSelById().equals(grand.getGccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (SelectionCriteriaGeoAreaGccDTO gcc : gccDto) {
+								SelectionCriteriaGeoAreaGrandChildrenDTO gc = new SelectionCriteriaGeoAreaGrandChildrenDTO();
+								gc.setGccvValue(gcc.getGccvValue());
+								gc.setGccCritDesc(grand.getGccCritDesc());
+								gc.setGccIncExclInd(grand.getGccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setGeoAreaGrandChildList(grandData);
+				}
+				List<SelectionCriteriaGeoAreaPointsDTO> pointsdto = geoAreaPointsList.parallelStream().sequential()
+						.filter(point -> point.getGeopSelbyid().equals(geo.getGSelbyid())).collect(Collectors.toList());
+				geo.setGeoAreaChildList(childData);
+				geo.setGeoAreaPointsList(pointsdto);
+			}
+
+			for (ScAreaCodeDTO area : areaCodeList) {
+				List<ScAreaCodeChildrenDTO> childData = areaCodeChildList.parallelStream().sequential()
+						.filter(child -> child.getAccAreaCodeId() != null
+								&& (child.getAccAreaCodeId().equals(area.getAcSelbyid())))
+						.collect(Collectors.toList());
+				for (ScAreaCodeChildrenDTO child : childData) {
+					List<ScAreaCodeGrandChildrenDTO> grandChild = areaCodeGrandChildList.parallelStream().sequential()
+							.filter(grand -> grand.getAcccParentId().equals(child.getAccSelectById()))
+							.collect(Collectors.toList());
+					List<ScAreaCodeGrandChildrenDTO> grandData = new ArrayList<ScAreaCodeGrandChildrenDTO>();
+					for (ScAreaCodeGrandChildrenDTO grand : grandChild) {
+						List<ScAreaCodeValueDTO> gccDto = areaCodeValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getAcccvSelById().equals(grand.getAcccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScAreaCodeValueDTO value : gccDto) {
+								ScAreaCodeGrandChildrenDTO gc = new ScAreaCodeGrandChildrenDTO();
+								gc.setAcccCritDesc(grand.getAcccCritDesc());
+								gc.setAcccValue(value.getAcccvValue());
+								gc.setAcccIncExclInd(grand.getAcccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setAreaCodeGrandChildrenList(grandData);
+				}
+				area.setAreaChildrenList(childData);
+			}
+
+			for (ScIcaoDTO ica : icaoList) {
+				List<ScIcaoChildrenDTO> childData = icaoChildList.parallelStream().sequential()
+						.filter(child -> child.getIccIcaoCodeId() != null
+								&& (child.getIccIcaoCodeId().equals(ica.getIcSelbyid())))
+						.collect(Collectors.toList());
+				for (ScIcaoChildrenDTO child : childData) {
+					List<ScIcaoGrandChildrenDTO> grandChild = icaoGrandChildList.parallelStream().sequential()
+							.filter(grand -> grand.getIcccParentId().equals(child.getIccSelectById()))
+							.collect(Collectors.toList());
+					List<ScIcaoGrandChildrenDTO> grandData = new ArrayList<>();
+					for (ScIcaoGrandChildrenDTO grand : grandChild) {
+						List<ScIcaoValueDTO> gccDto = icaoValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getIcccvSelById().equals(grand.getIcccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScIcaoValueDTO gcc : gccDto) {
+								ScIcaoGrandChildrenDTO gc = new ScIcaoGrandChildrenDTO();
+								gc.setIccValue(gcc.getIcccvValue());
+								gc.setIcccCritDesc(grand.getIcccCritDesc());
+								gc.setIcccIncExclInd(grand.getIcccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setIcaoGrandChildrenList(grandData);
+				}
+				ica.setIcaoChildrenList(childData);
+			}
+
+			for (ScArptGrpDTO arpt : arptGrpDTOList) {
+				List<ScArptGrpChildrenDTO> childData = arptGrpChildrenDTOList.parallelStream().sequential()
+						.filter(child -> child.getAgcAirportGroupId() != null
+								&& (child.getAgcAirportGroupId().equals(arpt.getAgSelbyid())))
+						.collect(Collectors.toList());
+				for (ScArptGrpChildrenDTO child : childData) {
+					List<ScArptGrpGrandChildrenDTO> grandChild = arptGrpGrandChildrenList.parallelStream().sequential()
+							.filter(grand -> grand.getAgccParentId().equals(child.getAgcSelectById()))
+							.collect(Collectors.toList());
+					List<ScArptGrpGrandChildrenDTO> grandData = new ArrayList<>();
+					for (ScArptGrpGrandChildrenDTO grand : grandChild) {
+						List<ScArptGrpValueDTO> gccDto = arptGrpValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getAgccvSelById().equals(grand.getAgccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScArptGrpValueDTO gcc : gccDto) {
+								ScArptGrpGrandChildrenDTO gc = new ScArptGrpGrandChildrenDTO();
+								gc.setAgccvValue(gcc.getAgccvValue());
+								gc.setAgccCritDesc(grand.getAgccCritDesc());
+								gc.setAgccIncExclInd(grand.getAgccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setArptGrpGrandChildList(grandData);
+				}
+				arpt.setArptGrpChildList(childData);
+			}
+
+			String aipRunwayLength = "";
+
+			String selectionGeoGraphic = "";
+			String selectionByAreaCode = "";
+			String selectionByIcaoCode = "";
+			String selectionByAirportGrp = "";
+
+			for (DuRecord rec : aifRwyLimitResult) {
+				aipRunwayLength = rec.getString();
+			}
+			String rnpData = rnpFormula(pNavdbId);
+			initializeReport();
+			onHeader();
+			beforeReport(pNavdbId);
+			if (!cpNoneMessage.equals("None Selected") && cpNoneMessage != "") {
+				selectionByAreaCode = cpNoneMessage.split("\n")[0].toString();
+				selectionByIcaoCode = cpNoneMessage.split("\n")[0].toString();
+				selectionGeoGraphic = cpNoneMessage.split("\n")[0].toString();
+				selectionByAirportGrp = cpNoneMessage.split("\n")[0].toString();
+			} else if (cpNoneMessage.equals("None Selected")) {
+				selectionByAreaCode = "None Selected";
+				selectionByIcaoCode = "None Selected";
+				selectionGeoGraphic = "None Selected";
+				selectionByAirportGrp = "None Selected";
+			}
+			resetHeight(22f);
+			contentStartHeight = currentHeight;
+			continueBlock = "General Criteria";
+			printSameLine(contentStream, page, "General Criteria ", 50f, 14, false, HELVETICA);
+			resetHeight(4f);
+			String[] message = cpNoneMessage.split("\n");
+			List<String> cpMessage = Arrays.asList(message);
+			for (String cpMesg : cpMessage) {
+				print(contentStream, page, cpMesg, 267f, 10f, HELVETICA);
+			}
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+
+			resetHeight(15f);
+			contentStartHeight = currentHeight;
+			print(contentStream, page, "Default Criteria ", 50f, 14f, HELVETICA);
+
+			resetHeight(10f);
+
+			continueBlock = BLOCK.DEFAULTCRITERIA.toString();
+			if (defaultCriteriaResultInr.size() > 0) {
+				drawRowWithoutWrap(contentStream, 496f, 68f, new String[] { "Record Type", "Selection Rule" },
+						new float[] { 80f, 300f, 400f }, 10, HELVETICA_BOLD, null);
+
+				for (SelectionCriteriaDefaultCriteiriaMasterDTO defaultData : defaultCriteriaResultInr) {
+					if (defaultData.getDefaultCriteiriaChild().size() != 0
+							&& !defaultData.getIncludeExcludeInd().equalsIgnoreCase("X")) {
+						drawRowWithWrap(contentStream, 496f, 68f,
+								new String[] { defaultData.getRecordTypeDescr(),
+										accIncexclFormula(defaultData.getIncludeExcludeInd()) },
+								new float[] { 80f, 300f, 400f }, new String[] { "start", "start" }, 10, FONT, BOTTOM);
+						subTableRuleStart = true;
+						if (Arrays.asList("R").contains(defaultData.getIncludeExcludeInd())) {
+							for (int i = 0; i < defaultData.getDefaultCriteiriaChild().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								if (defaultData.getDefaultCriteiriaChild().size() == 1) {
+									printSameLine(contentStream, page, prefix + "   ", 130, 10, HELVETICA_BOLD);
+									drawRowWithWrap(contentStream, 496f, 68f,
+											new String[] {
+													defaultData.getDefaultCriteiriaChild().get(i).getDccCritDesc() + " "
+															+ (Objects.equals(defaultData.getDefaultCriteiriaChild()
+																	.get(i).getDccValue(), null)
+																			? ""
+																			: defaultData.getDefaultCriteiriaChild()
+																					.get(i).getDccValue()),
+													dccIncexclDisplayFormula(defaultData.getDefaultCriteiriaChild()
+															.get(i).getDccIncExclInd()) },
+											new float[] { 180f, 440f, 500f }, new String[] { "start", "start" }, 10,
+											FONT, TOP);
+									break;
+								}
+								if (i == defaultData.getDefaultCriteiriaChild().size()) {
+									printSameLine(contentStream, page, prefix + "   ", 130, 10, HELVETICA_BOLD);
+									drawRowWithWrap(contentStream, 496f, 68f,
+											new String[] {
+													defaultData.getDefaultCriteiriaChild().get(i).getDccCritDesc() + " "
+															+ (Objects.equals(defaultData.getDefaultCriteiriaChild()
+																	.get(i).getDccValue(), null)
+																			? ""
+																			: defaultData.getDefaultCriteiriaChild()
+																					.get(i).getDccValue()),
+													dccIncexclDisplayFormula(defaultData.getDefaultCriteiriaChild()
+															.get(i).getDccIncExclInd()) },
+											new float[] { 180f, 440f, 500f }, new String[] { "start", "start" }, 10,
+											FONT, TOP);
+								}
+								printSameLine(contentStream, page, prefix + "   ", 130, 10, HELVETICA_BOLD);
+								drawRowWithWrap(contentStream, 496f, 68f,
+										new String[] {
+												defaultData.getDefaultCriteiriaChild().get(i).getDccCritDesc() + " "
+														+ (Objects.equals(defaultData.getDefaultCriteiriaChild().get(i)
+																.getDccValue(), null)
+																		? ""
+																		: defaultData.getDefaultCriteiriaChild().get(i)
+																				.getDccValue()),
+												dccIncexclDisplayFormula(defaultData.getDefaultCriteiriaChild().get(i)
+														.getDccIncExclInd()) },
+										new float[] { 180f, 440f, 500f }, new String[] { "start", "start" }, 10, FONT,
+										BOTH);
+							}
+							subTableRuleStart = false;
+							contentStream.moveTo(68f, currentHeight); // Top border
+							contentStream.lineTo(565f, currentHeight);
+							contentStream.stroke();
+						}
+					} else {
+						drawRowWithoutWrap(contentStream, 496f, 68f,
+								new String[] { defaultData.getRecordTypeDescr(),
+										selectionRuleFormula(defaultData.getIncludeExcludeInd()) },
+								new float[] { 80f, 300f, 400f }, 10, FONT, null);
+					}
+				}
+			}
+			subTableRuleStart = false;
+			resetHeight(8f);
+			// fill color
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "AIF Runway Length Limit", 50f, 14f, FONT);
+			continueBlock = BLOCK.AIFRUNWAYLEN.toString();
+			resetHeight(-10f);
+			printSameLine(contentStream, page, aipRunwayLength, 238f, 10f, FONT);
+			resetHeight(15f);
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "RNP  (nms)", 50f, 14f, FONT);
+			continueBlock = BLOCK.RNP.toString();
+			resetHeight(-10f);
+			printSameLine(contentStream, page, rnpData, 238f, 10f, FONT);
+			resetHeight(15f);
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "Selection By Geographic Area", 50f, 14f, FONT);
+			continueBlock = BLOCK.SELECTIONGEOGRAPHICAREA.toString();
+			resetHeight(-10f);
+			if (geoAreaList.size() != 0) {
+				selectionGeoGraphic = "";
+			}
+			printSameLine(contentStream, page, selectionGeoGraphic, 267f, 10f, FONT);
+			resetHeight(15f);
+
+			for (SelectionCriteriaGeoArea geo : geoAreaList) {
+				geographicStartHeight = currentHeight;
+				print(contentStream, page, "Geographic Area Name:", 80f, 10f, HELVETICA_BOLD);
+				resetHeight(-11f);
+				printSameLine(contentStream, page,
+						geo.getGGeoAriaName() + "                             " + nullCheck(geo.getGIncexcl()), 207f,
+						10f, FONT);
+				resetHeight(25f);
+				geoGraphicName = geo.getGGeoAriaName() + "                             " + nullCheck(geo.getGIncexcl());
+
+				drawRowWithoutWrap(contentStream, 262f, 240f, new String[] { "Seq #", "Latitude", "Longitude" },
+						new float[] { 282f, 317f, 413f }, 10, HELVETICA_BOLD, null);
+				geoGraphicSubHeader = "Seq #";
+				for (SelectionCriteriaGeoAreaPointsDTO points : geo.getGeoAreaPointsList()) {
+					drawRowWithWrap(contentStream, 262f, 240f, new String[] { points.getGeopSeqn().toString() },
+							new float[] { 162f, 308f, }, new String[] { "end" }, 10, FONT, null);
+					resetHeight(-10f);
+					printSameLine(contentStream, page, points.getGLatitude(), 318f, 10f, FONT);
+					printSameLine(contentStream, page, points.getGLongitude(), 414f, 10f, FONT);
+					resetHeight(10f);
+				}
+				geoGraphicSubHeader = null;
+				resetHeight(20f);
+				if (geoGraphicSubHeader != "New Page") {
+					drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+							new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+					geoGraphicSubHeader = "Record Type";
+				}
+				for (SelectionCriteriaGeoAreaChildren child : geo.getGeoAreaChildList()) {
+					if (child.getGeoAreaGrandChildList().size() != 0) {
+						drawRowWithWrap(contentStream, 450f, 98f,
+								new String[] { child.getGcRecordTypeDescr(), gcIncexclFormula(child.getGcIncexcl()) },
+								new float[] { 108f, 325f, 425f }, new String[] { "start", "start" }, 10, FONT, BOTTOM);
+						for (int i = 0; i < child.getGeoAreaGrandChildList().size(); i++) {
+							String prefix = i == 0 ? "Rules:  " : "";
+							subTableRuleStart = true;
+							if (child.getGeoAreaGrandChildList().size() == 1) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getGeoAreaGrandChildList().get(i).getGccCritDesc() + " "
+												+ (Objects.equals(
+														child.getGeoAreaGrandChildList().get(i).getGccvValue(), null)
+																? ""
+																: child.getGeoAreaGrandChildList().get(i)
+																		.getGccvValue()),
+										dccIncexclDisplayFormula(
+												child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+								break;
+							}
+							if (i == child.getGeoAreaGrandChildList().size()) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getGeoAreaGrandChildList().get(i).getGccCritDesc() + " "
+												+ (Objects.equals(
+														child.getGeoAreaGrandChildList().get(i).getGccvValue(), null)
+																? ""
+																: child.getGeoAreaGrandChildList().get(i)
+																		.getGccvValue()),
+										dccIncexclDisplayFormula(
+												child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+							}
+							printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+							drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+									child.getGeoAreaGrandChildList().get(i).getGccCritDesc() + " "
+											+ (Objects.equals(child.getGeoAreaGrandChildList().get(i).getGccvValue(),
+													null) ? ""
+															: child.getGeoAreaGrandChildList().get(i).getGccvValue()),
+									dccIncexclDisplayFormula(
+											child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()) },
+									new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+									BOTH);
+						}
+						subTableRuleStart = false;
+						contentStream.moveTo(98f, currentHeight); // Top border
+						contentStream.lineTo(548f, currentHeight);
+						contentStream.stroke();
+
+					} else {
+						drawRowWithoutWrap(contentStream, 450f, 98f,
+								new String[] { child.getGcRecordTypeDescr(), gcIncexclFormula(child.getGcIncexcl()) },
+								new float[] { 108f, 325f, 425f }, 10, FONT, null);
+					}
+				}
+				resetHeight(10f);
+				contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+				contentStream.setLineWidth(1);// border thickness
+				contentStream.addRect(71f, currentHeight - 4.5f, 490f, 4f);
+				contentStream.fill();
+				// draw border color
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 4.5f, 493f, geographicStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				contentStream.setNonStrokingColor(0, 0, 0);
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				resetHeight(10f);
+				geoGraphicName = null;
+				if (geoGraphicSubHeader != "New Page") {
+					geoGraphicSubHeader = null;
+				}
+			}
+			subTableRuleStart = false;
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = 0f;
+
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "Selection By Area Code", 50f, 14f, FONT);
+			continueBlock = BLOCK.SELECTIONBYAREACODE.toString();
+			resetHeight(-10f);
+			if (areaCodeList.size() != 0) {
+				selectionByAreaCode = "";
+			}
+			printSameLine(contentStream, page, selectionByAreaCode, 267f, 10f, FONT);
+			resetHeight(15f);
+			for (ScAreaCodeDTO area : areaCodeList) {
+				areaCodeStartHeight = currentHeight;
+				print(contentStream, page, "Area Code:", 80f, 10f, HELVETICA_BOLD);
+				resetHeight(-11f);
+				printSameLine(contentStream, page, area.getAcAreaCode(), 145f, 10f, FONT);
+				resetHeight(25f);
+				areaCodeName = area.getAcAreaCode();
+
+				drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+						new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+				areaCodeSubHeader = "Record Type";
+				for (ScAreaCodeChildrenDTO child : area.getAreaChildrenList()) {
+
+					if (child.getAreaCodeGrandChildrenList().size() != 0) {
+
+						drawRowWithWrap(contentStream, 450f, 98f,
+								new String[] { child.getAccRecordTypeDescr(),
+										accIncexclFormula(child.getAccIncexcl()) },
+								new float[] { 108f, 325f, 425f }, new String[] { "start", "start" }, 10, FONT, BOTTOM);
+						subTableRuleStart = true;
+						for (int i = 0; i < child.getAreaCodeGrandChildrenList().size(); i++) {
+							String prefix = i == 0 ? "Rules:  " : "";
+							if (child.getAreaCodeGrandChildrenList().size() == 1) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f,
+										new String[] {
+												child.getAreaCodeGrandChildrenList().get(i).getAcccCritDesc() + " "
+														+ (Objects.equals(child.getAreaCodeGrandChildrenList().get(i)
+																.getAcccValue(), null)
+																		? ""
+																		: child.getAreaCodeGrandChildrenList().get(i)
+																				.getAcccValue()),
+												acccIncexclDisplayFormula(child.getAreaCodeGrandChildrenList().get(i)
+														.getAcccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+								break;
+							}
+							if (i == child.getAreaCodeGrandChildrenList().size()) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f,
+										new String[] {
+												child.getAreaCodeGrandChildrenList().get(i).getAcccCritDesc() + " "
+														+ (Objects.equals(child.getAreaCodeGrandChildrenList().get(i)
+																.getAcccValue(), null)
+																		? ""
+																		: child.getAreaCodeGrandChildrenList().get(i)
+																				.getAcccValue()),
+												acccIncexclDisplayFormula(child.getAreaCodeGrandChildrenList().get(i)
+														.getAcccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+							}
+							printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+							drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+									child.getAreaCodeGrandChildrenList().get(i).getAcccCritDesc() + " "
+											+ (Objects.equals(
+													child.getAreaCodeGrandChildrenList().get(i).getAcccValue(), null)
+															? ""
+															: child.getAreaCodeGrandChildrenList().get(i)
+																	.getAcccValue()),
+									acccIncexclDisplayFormula(
+											child.getAreaCodeGrandChildrenList().get(i).getAcccIncExclInd()) },
+									new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+									BOTH);
+						}
+						subTableRuleStart = false;
+						contentStream.moveTo(98f, currentHeight); // Top border
+						contentStream.lineTo(548f, currentHeight);
+						contentStream.stroke();
+
+					} else {
+						drawRowWithoutWrap(contentStream, 450f, 98f,
+								new String[] { child.getAccRecordTypeDescr(),
+										accIncexclFormula(child.getAccIncexcl()) },
+								new float[] { 108f, 325f, 425f }, 10, FONT, null);
+					}
+				}
+				areaCodeSubHeader = "";
+				resetHeight(10f);
+				contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+				contentStream.setLineWidth(1);// border thickness
+				contentStream.addRect(71f, currentHeight - 4.5f, 490f, 4f);
+				contentStream.fill();
+				// draw border color
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 4.5f, 493f, areaCodeStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				contentStream.setNonStrokingColor(0, 0, 0);
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				resetHeight(10f);
+				areaCodeName = null;
+			}
+			areaCodeSubHeader = "";
+			subTableRuleStart = false;
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "Selection By ICAO Code", 50f, 14f, FONT);
+			continueBlock = BLOCK.SELECTIONBYICAOCODE.toString();
+			resetHeight(-10f);
+			if (icaoList.size() != 0) {
+				selectionByIcaoCode = "";
+			}
+			printSameLine(contentStream, page, selectionByIcaoCode, 267f, 10f, FONT);
+			resetHeight(15f);
+			for (ScIcaoDTO icaoDto : icaoList) {
+				icaoStartHeight = currentHeight;
+				print(contentStream, page, "ICAO Code:", 80f, 10f, HELVETICA_BOLD);
+				resetHeight(-11f);
+				printSameLine(contentStream, page, icaoDto.getIcIcaoCode(), 145f, 10f, FONT);
+				resetHeight(25f);
+				icaoCodeName = icaoDto.getIcIcaoCode();
+
+				drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+						new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+				for (ScIcaoChildrenDTO child : icaoDto.getIcaoChildrenList()) {
+					icaoCodeSubHeader = "Record Type";
+					if (child.getIcaoGrandChildrenList().size() != 0) {
+
+						drawRowWithWrap(contentStream, 450f, 98f,
+								new String[] { child.getIccRecordTypeDescr(),
+										accIncexclFormula(child.getIccIncexcl()) },
+								new float[] { 108f, 325f, 425f }, new String[] { "start", "start" }, 10, FONT, BOTTOM);
+						subTableRuleStart = true;
+						for (int i = 0; i < child.getIcaoGrandChildrenList().size(); i++) {
+							String prefix = i == 0 ? "Rules:  " : "";
+							if (child.getIcaoGrandChildrenList().size() == 1) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getIcaoGrandChildrenList().get(i).getIcccCritDesc() + " "
+												+ (Objects.equals(
+														child.getIcaoGrandChildrenList().get(i).getIccValue(), null)
+																? ""
+																: child.getIcaoGrandChildrenList().get(i)
+																		.getIccValue()),
+										acccIncexclDisplayFormula(
+												child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+								break;
+							}
+							if (i == child.getIcaoGrandChildrenList().size()) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getIcaoGrandChildrenList().get(i).getIcccCritDesc() + " "
+												+ (Objects.equals(
+														child.getIcaoGrandChildrenList().get(i).getIccValue(), null)
+																? ""
+																: child.getIcaoGrandChildrenList().get(i)
+																		.getIccValue()),
+										acccIncexclDisplayFormula(
+												child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+							}
+							printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+							drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+									child.getIcaoGrandChildrenList().get(i).getIcccCritDesc() + " "
+											+ (Objects.equals(child.getIcaoGrandChildrenList().get(i).getIccValue(),
+													null) ? "" : child.getIcaoGrandChildrenList().get(i).getIccValue()),
+									acccIncexclDisplayFormula(
+											child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()) },
+									new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+									BOTH);
+						}
+						subTableRuleStart = false;
+						contentStream.moveTo(98f, currentHeight); // Top border
+						contentStream.lineTo(548f, currentHeight);
+						contentStream.stroke();
+
+					} else {
+						drawRowWithoutWrap(contentStream, 450f, 98f,
+								new String[] { child.getIccRecordTypeDescr(),
+										accIncexclFormula(child.getIccIncexcl()) },
+								new float[] { 108f, 325f, 425f }, 10, FONT, null);
+					}
+				}
+				icaoCodeSubHeader = "";
+				resetHeight(10f);
+				contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+				contentStream.setLineWidth(1);// border thickness
+				contentStream.addRect(71f, currentHeight - 4.5f, 490f, 4f);
+				contentStream.fill();
+				// draw border color
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 4.5f, 493f, icaoStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				contentStream.setNonStrokingColor(0, 0, 0);
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				resetHeight(10f);
+				icaoCodeName = null;
+
+			}
+			icaoCodeSubHeader = "";
+			subTableRuleStart = false;
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+
+			continueBlock = "";
+			contentStartHeight = currentHeight;
+			resetHeight(-4f);
+			print(contentStream, page, "Selection By Airport Group", 50f, 14f, FONT);
+			continueBlock = BLOCK.SELECTIONBYAIRPORTGROUP.toString();
+			resetHeight(-10f);
+			if (arptGrpDTOList.size() != 0) {
+				selectionByAirportGrp = "";
+			}
+			printSameLine(contentStream, page, selectionByAirportGrp, 267f, 10f, FONT);// need to remove line
+			resetHeight(15f);
+			for (ScArptGrpDTO arpt : arptGrpDTOList) {
+				airportGrpStartHeight = currentHeight;
+				print(contentStream, page, "Airport Group:", 85f, 10f, HELVETICA_BOLD);
+				resetHeight(-11f);
+				printSameLine(contentStream, page, arpt.getAgGroupName(), 161f, 10f, FONT);
+				printSameLine(contentStream, page, arpt.getAgIncexcl(), 304f, 10f, FONT);
+				resetHeight(25f);
+				airportGrpName = arpt.getAgGroupName();
+				airportGrpIncexcl = arpt.getAgIncexcl();
+				drawRowWithoutWrap(contentStream, 450f, 98f, new String[] { "Record Type", "Selection Rule" },
+						new float[] { 108f, 325f, 425f }, 10, HELVETICA_BOLD, null);
+				for (ScArptGrpChildrenDTO child : arpt.getArptGrpChildList()) {
+
+					if (child.getArptGrpGrandChildList().size() != 0) {
+
+						drawRowWithWrap(contentStream, 450f, 98f,
+								new String[] { child.getAgcRecordTypeDescr(), gcIncexclFormula(child.getAgcIncexcl()) },
+								new float[] { 108f, 325f, 425f }, new String[] { "start", "start" }, 10, FONT, BOTTOM);
+						subTableRuleStart = true;
+						for (int i = 0; i < child.getArptGrpGrandChildList().size(); i++) {
+							String prefix = i == 0 ? "Rules:  " : "";
+							if (child.getArptGrpGrandChildList().size() == 1) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getArptGrpGrandChildList().get(i).getAgccCritDesc() + " "
+												+ (Objects.equals(
+														child.getArptGrpGrandChildList().get(i).getAgccvValue(), null)
+																? ""
+																: child.getArptGrpGrandChildList().get(i)
+																		.getAgccvValue()),
+										acccIncexclDisplayFormula(
+												child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+								break;
+							}
+							if (i == child.getArptGrpGrandChildList().size()) {
+								printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+								drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+										child.getArptGrpGrandChildList().get(i).getAgccCritDesc() + " "
+												+ (Objects.equals(
+														child.getArptGrpGrandChildList().get(i).getAgccvValue(), null)
+																? ""
+																: child.getArptGrpGrandChildList().get(i)
+																		.getAgccvValue()),
+										acccIncexclDisplayFormula(
+												child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()) },
+										new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+										TOP);
+							}
+							printSameLine(contentStream, page, prefix + "   ", 160, 10, COURIER_BOLD);
+							drawRowWithWrap(contentStream, 450f, 98f, new String[] {
+									child.getArptGrpGrandChildList().get(i).getAgccCritDesc() + " "
+											+ (Objects.equals(child.getArptGrpGrandChildList().get(i).getAgccvValue(),
+													null) ? ""
+															: child.getArptGrpGrandChildList().get(i).getAgccvValue()),
+									acccIncexclDisplayFormula(
+											child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()) },
+									new float[] { 200f, 460f, 520f }, new String[] { "start", "start" }, 10, FONT,
+									BOTH);
+						}
+						subTableRuleStart = false;
+						contentStream.moveTo(98f, currentHeight); // Top border
+						contentStream.lineTo(548f, currentHeight);
+						contentStream.stroke();
+
+					} else {
+						drawRowWithoutWrap(contentStream, 450f, 98f,
+								new String[] { child.getAgcRecordTypeDescr(), gcIncexclFormula(child.getAgcIncexcl()) },
+								new float[] { 108f, 325f, 425f }, 10, FONT, null);
+					}
+				}
+				resetHeight(10f);
+				contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+				contentStream.setLineWidth(1);// border thickness
+				contentStream.addRect(71f, currentHeight - 4.5f, 490f, 4f);
+				contentStream.fill();
+				// draw border color
+				contentStream.setStrokingColor(0.48f);// black border
+				contentStream.setLineWidth(1.2f);// border thickness
+				contentStream.addRect(68f, currentHeight - 4.5f, 493f, airportGrpStartHeight - currentHeight + 10f);
+				contentStream.stroke();
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				contentStream.setNonStrokingColor(0, 0, 0);
+				contentStream.setStrokingColor(0, 0, 0); // reset color to black
+				resetHeight(10f);
+				airportGrpName = null;
+
+			}
+			subTableRuleStart = false;
+			contentStream.setNonStrokingColor(0.522f, 0.522f, 0.522f);// grey fill
+			contentStream.setLineWidth(1);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, 4f);
+			contentStream.fill();
+			// draw border color
+			contentStream.setStrokingColor(0.48f);// black border
+			contentStream.setLineWidth(1.2f);// border thickness
+			contentStream.addRect(36f, currentHeight - 4.5f, 535.5f, contentStartHeight - currentHeight + 10f);
+			contentStream.stroke();
+			contentStream.setStrokingColor(0, 0, 0); // reset color to black
+			contentStream.setNonStrokingColor(0, 0, 0);
+			resetHeight(15f);
+			subTableRuleStart = false;
+
+			continueBlock = "";
+			if (airportGrpList.size() > 0) {
+				print(contentStream, page, "Airport Group - Airport List", 47f, 14f, FONT);
+				continueBlock = BLOCK.AIRPORTGROUP.toString();
+				resetHeight(10f);
+				contentStartHeight = currentHeight;
+				Map<String, List<ScAirportGroupDTO>> airportGroupList = airportGrpList.stream().collect(
+						Collectors.groupingBy(ScAirportGroupDTO::getGroupName, TreeMap::new, Collectors.toList()));
+				for (Map.Entry<String, List<ScAirportGroupDTO>> entry : airportGroupList.entrySet()) {
+					String groupName = entry.getKey();
+					List<ScAirportGroupDTO> groupList = entry.getValue();
+					print(contentStream, page, "Group Name: " + groupName, 58f, 10f, HELVETICA_BOLD);
+					airportGrpListName = groupName;
+					resetHeight(5f);
+					printSameLine(contentStream, page, "Airports:", 85f, 10f, HELVETICA_BOLD);
+					drawRowWithoutWrap(contentStream, 423f, 135f,
+							new String[] { "Ident", DbConstants.ICAO, "ATA/IATA", "Name", "Std/Tld" },
+							new float[] { 144f, 184f, 215f, 273f, 520f }, 10, HELVETICA_BOLD, null);
+					for (ScAirportGroupDTO airport : groupList) {
+						drawRowWithoutWrap(contentStream, 400f, 68f,
+								new String[] { airport.getAlAirportIdent(), airport.getAlAirportIcao(),
+										nullCheck(airport.getAtaIata()), nullCheck(airport.getName()),
+										nullCheck(airport.getStdTld()) },
+								new float[] { 144f, 184f, 215f, 273f, 520f }, 10, HELVETICA, "ALL");
+					}
+
+					resetHeight(10f);
+					contentStream.setStrokingColor(0.48f);// black border
+					contentStream.setLineWidth(1.2f);// border thickness
+					contentStream.addRect(50f, currentHeight - 4.5f, 520f, contentStartHeight - currentHeight + 10f);
+					contentStream.stroke();
+					contentStream.setStrokingColor(0, 0, 0); // reset color to black
+					contentStream.setNonStrokingColor(0, 0, 0);
+					contentStream.setStrokingColor(0, 0, 0); // reset color to black
+					resetHeight(10f);
+					contentStartHeight = currentHeight;
+				}
+
+				resetHeight(10f);
+			}
+
+			continueBlock = "";
+			if (listCriteriaValueList.size() > 0) {
+				inSelectRecordList = true;
+				Map<String, List<ScListCriteriaValuesDTO>> selectRecordList = listCriteriaValueList.stream()
+						.collect(Collectors.groupingBy(ScListCriteriaValuesDTO::getLvRecordDescr, TreeMap::new,
+								Collectors.toList()));
+				for (Map.Entry<String, List<ScListCriteriaValuesDTO>> selectList : selectRecordList.entrySet()) {
+					String selectName = selectList.getKey();
+					List<ScListCriteriaValuesDTO> selectData = selectList.getValue();
+					List<ScListCriteriaValuesDTO> excludedList = selectData.stream()
+							.filter(p -> p.getLvIncexcl().equalsIgnoreCase("X")).collect(Collectors.toList());
+					excludedList = excludedList.stream()
+							.sorted(Comparator.comparingInt(ScListCriteriaValuesDTO::getLvSeq))
+							.collect(Collectors.toList());
+					List<ScListCriteriaValuesDTO> includedList = selectData.stream()
+							.filter(p -> p.getLvIncexcl().equalsIgnoreCase("I")).collect(Collectors.toList());
+					includedList = includedList.stream()
+							.sorted(Comparator.comparingInt(ScListCriteriaValuesDTO::getLvSeq))
+							.collect(Collectors.toList());
+					List<String> labels = selectData.stream().map(ScListCriteriaValuesDTO::getLvLabel).distinct()
+							.collect(Collectors.toList());
+					labels = labels.stream().sorted().collect(Collectors.toList());
+					labelsList = labels;
+					if (excludedList.size() > 0) {
+						print(contentStream, page, "Select Records by List", 55f, 14f, FONT);
+						resetHeight(5f);
+						print(contentStream, page, selectName + " " + lvIncexclDisplayFormula("X"), 98f, 10f,
+								HELVETICA_BOLD);
+						continueBlock = BLOCK.SELECTRECORDLIST.toString();
+						recordsByListName = selectName + " " + lvIncexclDisplayFormula("X");
+						resetHeight(5f);
+						drawRowWithWrapColumnLine(contentStream, labels.size() * 80f, 135f,
+								labels.toArray(new String[0]), getColumnLabelSize(labels.size()),
+								getColumnAligment(labels.size()), getColumnLine(labels.size()), 10, HELVETICA_BOLD);
+						Map<String, List<ScListCriteriaValuesDTO>> list = new HashMap<>();
+						for (String label : labels) {
+							list.put(label, excludedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+									.collect(Collectors.toList()));
+						}
+						String[][] finalList = new String[list.get(labels.get(0)).size()][labels.size()];
+						for (int i = 0; i < labels.size(); i++) {
+							List<ScListCriteriaValuesDTO> data = list.get(labels.get(i));
+							for (int j = 0; j < data.size(); j++) {
+								finalList[j][i] = data.get(j).getLvValue();
+							}
+
+						}
+						int seq = 1;
+						for (String[] string : finalList) {
+							String[] original = string;
+							String[] updated = new String[original.length + 1];
+							updated[0] = String.valueOf(seq);
+							System.arraycopy(original, 0, updated, 1, original.length);
+							drawRowWithWrapColumnLine(contentStream, updated.length * 80f, 55f, updated,
+									getColumnSize(updated.length), getColumnAligment(updated.length),
+									getColumnLine(labels.size() + 1), 10, FONT);
+							seq++;
+						}
+						resetHeight(5f);
+						recordsByListName = "";
+						continueBlock = "";
+						
+						if(labels.size()>6) {
+							continueBlock = BLOCK.SELECTRECORDLIST.toString();
+							List<String> modifiedLabel = labels.subList(6, labels.size());
+							labelsList=modifiedLabel;
+							drawRowWithWrapColumnLine(contentStream, modifiedLabel.size() * 80f, 135f,
+									modifiedLabel.toArray(new String[0]), getColumnLabelSize(modifiedLabel.size()),
+									getColumnAligment(modifiedLabel.size()), getColumnLine(modifiedLabel.size()), 10, HELVETICA_BOLD);
+							Map<String, List<ScListCriteriaValuesDTO>> modifiedList = new HashMap<>();
+							
+							for (String label : modifiedLabel) {
+								modifiedList.put(label, excludedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+										.collect(Collectors.toList()));
+							}
+							String[][] modifiedFinalList = new String[modifiedList.get(modifiedLabel.get(0)).size()][modifiedLabel.size()];
+							for (int i = 0; i < modifiedLabel.size(); i++) {
+								List<ScListCriteriaValuesDTO> data = modifiedList.get(modifiedLabel.get(i));
+								for (int j = 0; j < data.size(); j++) {
+									modifiedFinalList[j][i] = data.get(j).getLvValue();
+								}
+
+							}
+							int modifiedSeq = 1;
+							for (String[] string : modifiedFinalList) {
+								String[] original = string;
+								String[] updated = new String[original.length + 1];
+								updated[0] = String.valueOf(modifiedSeq);
+								System.arraycopy(original, 0, updated, 1, original.length);
+								drawRowWithWrapColumnLine(contentStream, updated.length * 80f, 55f, updated,
+										getColumnSize(updated.length), getColumnAligment(updated.length),
+										getColumnLine(modifiedLabel.size() + 1), 10, FONT);
+								modifiedSeq++;
+							}
+							resetHeight(5f);
+							recordsByListName = "";
+							continueBlock = "";
+						}
+					}
+					labelsList = labels;
+					if (includedList.size() > 0) {
+						print(contentStream, page, "Select Records by List", 55f, 14f, FONT);
+						resetHeight(5f);
+						print(contentStream, page, selectName + " " + lvIncexclDisplayFormula("I"), 98f, 10f,
+								HELVETICA_BOLD);
+						recordsByListName = selectName + " " + lvIncexclDisplayFormula("I");
+						continueBlock = BLOCK.SELECTRECORDLIST.toString();
+						resetHeight(5f);
+						drawRowWithWrapColumnLine(contentStream, labels.size() * 80f, 135f,
+								labels.toArray(new String[0]), getColumnLabelSize(labels.size()),
+								getColumnAligment(labels.size()), getColumnLine(labels.size()), 10, HELVETICA_BOLD);
+						Map<String, List<ScListCriteriaValuesDTO>> list = new HashMap<>();
+						for (String label : labels) {
+							list.put(label, includedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+									.collect(Collectors.toList()));
+						}
+						String[][] finalList = new String[list.get(labels.get(0)).size()][labels.size()];
+						for (int i = 0; i < labels.size(); i++) {
+							List<ScListCriteriaValuesDTO> data = list.get(labels.get(i));
+							for (int j = 0; j < data.size(); j++) {
+								finalList[j][i] = data.get(j).getLvValue();
+							}
+
+						}
+						int seq = 1;
+						for (String[] string : finalList) {
+							String[] original = string;
+							String[] updated = new String[original.length + 1];
+							updated[0] = String.valueOf(seq);
+							System.arraycopy(original, 0, updated, 1, original.length);
+							drawRowWithWrapColumnLine(contentStream, updated.length * 80f, 55f, updated,
+									getColumnSize(updated.length), getColumnAligment(updated.length),
+									getColumnLine(labels.size() + 1), 10, FONT);
+							seq++;
+						}
+						resetHeight(5f);
+						recordsByListName = "";
+						continueBlock = "";
+						
+						if(labels.size()>6) {
+							continueBlock = BLOCK.SELECTRECORDLIST.toString();
+							List<String> modifiedLabel = labels.subList(6, labels.size());
+							labelsList=modifiedLabel;
+							drawRowWithWrapColumnLine(contentStream, modifiedLabel.size() * 80f, 135f,
+									modifiedLabel.toArray(new String[0]), getColumnLabelSize(modifiedLabel.size()),
+									getColumnAligment(modifiedLabel.size()), getColumnLine(modifiedLabel.size()), 10, HELVETICA_BOLD);
+							Map<String, List<ScListCriteriaValuesDTO>> modifiedList = new HashMap<>();
+							for (String label : modifiedLabel) {
+								modifiedList.put(label, includedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+										.collect(Collectors.toList()));
+							}
+							String[][] modifiedFinalList = new String[modifiedList.get(modifiedLabel.get(0)).size()][modifiedLabel.size()];
+							for (int i = 0; i < modifiedLabel.size(); i++) {
+								List<ScListCriteriaValuesDTO> data = modifiedList.get(modifiedLabel.get(i));
+								for (int j = 0; j < data.size(); j++) {
+									modifiedFinalList[j][i] = data.get(j).getLvValue();
+								}
+
+							}
+							int modifiedSeq = 1;
+							for (String[] string : modifiedFinalList) {
+								String[] original = string;
+								String[] updated = new String[original.length + 1];
+								updated[0] = String.valueOf(modifiedSeq);
+								System.arraycopy(original, 0, updated, 1, original.length);
+								drawRowWithWrapColumnLine(contentStream, updated.length * 80f, 55f, updated,
+										getColumnSize(updated.length), getColumnAligment(updated.length),
+										getColumnLine(modifiedLabel.size() + 1), 10, FONT);
+								modifiedSeq++;
+							}
+							resetHeight(5f);
+							recordsByListName = "";
+							continueBlock = "";
+						}
+					}
+					continueBlock = "";
+				}
+			}
+
+			contentStream.close();
+			onFooter();
+			try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
+
+				// Close content stream and save document
+				document.save(byteArrayOutputStream);
+				byte[] pdfBytes = byteArrayOutputStream.toByteArray();
+
+				return pdfBytes; // Return as byte array
+			} catch (Exception e) {
+				log.error("Error generating PDF {}" , e.getMessage());
+				throw e;
+			}
+
+		} catch (RuntimeException e) {
+			log.error("RuntimeException captured, Error generating PDF {}", e.getMessage());
+			throw e;
+		} catch (Exception e) {
+			log.error("Error generating PDF {}", e.getMessage());
+			throw e;
+		}
+
+	}
+
+	public float[] getColumnSize(int noOfColumns) {
+		float[] columnSize = new float[noOfColumns + 1];
+		float initial = 50f;
+		for (int i = 0; i <= noOfColumns; i++) {
+			columnSize[i] = initial;
+			initial += 80f;
+		}
+		return columnSize;
+	}
+
+	public float[] getColumnLabelSize(int noOfColumns) {
+		float[] columnSize = new float[noOfColumns + 1];
+		float initial = 135f;
+		for (int i = 0; i <= noOfColumns; i++) {
+			columnSize[i] = initial;
+			initial += 80f;
+		}
+		return columnSize;
+	}
+
+	public String[] getColumnAligment(int noOfColumns) {
+		String[] coulmns = new String[noOfColumns];
+		for (int i = 0; i < noOfColumns; i++) {
+			coulmns[i] = "end";
+		}
+		return coulmns;
+	}
+
+	public float[] getColumnLine(int noOfColumns) {
+		float[] columnSize = new float[noOfColumns + 1];
+		float initial = 80f;
+		for (int i = 0; i < noOfColumns - 1; i++) {
+			columnSize[i] = initial;
+			initial += 80f;
+		}
+		return columnSize;
+	}
+
+	public void printSameLine(PDPageContentStream contentStream, PDPage page, String text, float x, float fontSize,
+			Boolean isItalic, PDFont font) throws IOException {
+
+		contentStream.setFont(font, fontSize);
+
+		contentStream.beginText();
+		contentStream.newLineAtOffset(x, currentHeight - fontSize + 2);
+		if (text.contains("\n")) {
+			String[] lines = text.split("\n");
+			for (String line : lines) {
+				contentStream.showText(line);
+				contentStream.newLineAtOffset(0, -15);
+			}
+		} else {
+			contentStream = newPage(1 * (fontSize + 2));
+
+			contentStream.showText(text);
+
+		}
+		contentStream.endText();
+	}
+
+	public void beforeReport(String navdbId) throws SQLException {
+		String vSelectable = "";
+		String vApplyInd = "";
+		String vFmsId = "";
+
+		String query = "select CRITERIA_ID, CRITERIA_DESCR from general_criteria";
+		List<DuRecord> getCriteriaId = app.executeQuery(query);
+
+		query = " select value_descr from navdb_general_criteria_value where navdb_id = ? and criteria_id =4";
+		List<DuRecord> getGenCriteriaValueResult = app.executeQuery(query, navdbId);
+
+		query = "select fms_id from navdb where navdb_id = ? ";
+		List<DuRecord> fmsResult = app.executeQuery(query, navdbId);
+
+		for (DuRecord fms : fmsResult) {
+			vFmsId = fms.getString();
+		}
+
+		for (DuRecord getCrit : getCriteriaId) {
+
+			query = "select selectable_ind from fms_general_criteria fgc where criteria_id = ? "
+					+ " and exists ( select 1 from flight_management_system where fms_id = ? and fms_id = fgc.fms_id)";
+			List<DuRecord> selectableResult = app.executeQuery(query, toInteger(getCrit.getObject("criteria_id")),
+					vFmsId);
+			if (selectableResult.size() == 0) {
+				break;
+			}
+			for (DuRecord select : selectableResult) {
+				vSelectable = select.getString();
+			}
+			if (vSelectable.equals("Y")) {
+				query = """
+						select nvl(apply_ind,' ') from navdb_general_criteria
+						where navdb_id = ? and criteria_id = ?
+						""";
+				List<DuRecord> applyIndResult = app.executeQuery(query, navdbId,
+						toInteger(getCrit.getObject("criteria_id")));
+
+				for (DuRecord apply : applyIndResult) {
+					if (apply.getString().equals("Y")) {
+						if (Objects.equals(cpNoneMessage, null)) {
+							cpNoneMessage = toString(getCrit.getObject("criteria_descr"));
+						} else {
+							cpNoneMessage = cpNoneMessage + chr(10) + toString(getCrit.getObject("criteria_descr"));
+						}
+						if (toInteger(getCrit.getObject("criteria_id")) == 4) {
+							for (DuRecord record : getGenCriteriaValueResult) {
+								cpNoneMessage = cpNoneMessage + chr(10) + toString(record.getObject("value_descr"));
+							}
+						}
+					}
+				}
+				if (applyIndResult.size() == 0) {
+					vApplyInd = "-";
+				}
+
+				if (vApplyInd.equals(" ") || vApplyInd.equals("-")) {
+					query = """
+							select 'Y' from fms_general_criteria fgc where criteria_id = ?
+							and default_ind = 'Y' and exists ( select 1 from flight_management_system
+							 where fms_id = ? and fms_id = fgc.fms_id)
+							""";
+					List<DuRecord> vYesResult = app.executeQuery(query, toInteger(getCrit.getObject("criteria_id")),
+							vFmsId);
+					if (vYesResult.size() != 0) {
+						if (Objects.equals(cpNoneMessage, null)) {
+							cpNoneMessage = toString(getCrit.getObject("criteria_descr"));
+						} else {
+							cpNoneMessage = cpNoneMessage + chr(10) + getCrit.getObject("criteria_descr");
+						}
+					}
+				}
+			} else if (vSelectable.equals("N")) {
+				log.debug("vSelectable equals N");
+			}
+
+		}
+		if (Objects.equals(cpNoneMessage, null)) {
+			cpNoneMessage = "None Selected";
+		}
+		query = "select data_supplier from navdb where navdb_id = ?";
+		List<DuRecord> supplierResult = app.executeQuery(query, navdbId);
+		for (DuRecord supplier : supplierResult) {
+			cpSupplier = supplier.getString();
+		}
+	}
+
+	public String acccvDisplayFormula(String acccCritDesc, String acccvValue) {
+		return acccCritDesc + " " + acccvValue;
+	}
+
+	public String acccIncexclDisplayFormula(String acccIncExclInd) {
+		String value = "";
+		if (acccIncExclInd.equals("I")) {
+			value = "Apply";
+		} else if (acccIncExclInd.equals("X")) {
+			value = "Do Not Apply";
+		}
+		return value;
+	}
+
+	public String accIncexclFormula(String acccIncExcl) {
+		if (acccIncExcl.equals("I")) {
+			return "Include All";
+		} else if (acccIncExcl.equals("X")) {
+			return "Exclude All";
+		} else if (acccIncExcl.equals("R")) {
+			return "By Rules (see below)";
+		} else if (acccIncExcl.equals("N")) {
+			return "Reference Only";
+		} else {
+			return "Apply Default Criteria";
+		}
+	}
+
+	public String agccvDisplayFormula(String agccCritDesc, String agccvValue) {
+		return agccCritDesc + " " + agccvValue;
+	}
+
+	public String agccIncexclDisplayFormula(String agccIncExclInd, String value) {
+		if (agccIncExclInd.equals("I")) {
+			return "Apply";
+		} else if (agccIncExclInd.equals("X")) {
+			return "Do Not Apply";
+		}
+		return value;
+	}
+
+	public String agcIncexclFormula(String agccIncExcl) {
+		if (agccIncExcl.equals("I")) {
+			return "Include All";
+		} else if (agccIncExcl.equals("X")) {
+			return "Exclude All";
+		} else if (agccIncExcl.equals("R")) {
+			return "By Rules (see below)";
+		} else if (agccIncExcl.equals("N")) {
+			return "Reference Only";
+		} else {
+			return "Apply Default Criteria";
+		}
+	}
+
+	public String dccvDisplayFormula(String dccCritDesc, String dccvValue) {
+		return dccCritDesc + " " + dccvValue;
+	}
+
+	public String dccIncexclDisplayFormula(String dccIncExclInd) {
+		String returnData = "";
+		if (dccIncExclInd.equals("I")) {
+			returnData = "Apply";
+		} else if (dccIncExclInd.equals("X")) {
+			returnData = "Do Not Apply";
+		}
+		return returnData;
+	}
+
+	public String gccvDisplayFormula(String gccCritDesc, String gccvValue) {
+		return gccCritDesc + " " + gccvValue;
+	}
+
+	public String gccIncexclDisplayFormula(String gccIncExclInd, String value) {
+		if (gccIncExclInd.equals("I")) {
+			return "Apply";
+		} else if (gccIncExclInd.equals("X")) {
+			return "Do Not Apply";
+		}
+		return value;
+	}
+
+	public String gcIncexclFormula(String gcIncExcl) {
+		if (gcIncExcl.equals("I")) {
+			return "Include All";
+		} else if (gcIncExcl.equals("X")) {
+			return "Exclude All";
+		} else if (gcIncExcl.equals("R")) {
+			return "By Rules (see below)";
+		} else if (gcIncExcl.equals("N")) {
+			return "Reference Only";
+		} else {
+			return "Apply Default Criteria";
+		}
+	}
+
+	public String icccvDisplayFormula(String icccCritDesc, String icccvValue) {
+		return icccCritDesc + " " + icccvValue;
+	}
+
+	public String icccIncexclDisplayFormula(String icccIncExclInd, String value) {
+		if (icccIncExclInd.equals("I")) {
+			return "Apply";
+		} else if (icccIncExclInd.equals("X")) {
+			return "Do Not Apply";
+		}
+		return value;
+	}
+
+	public String iccIncexclFormula(String iccIncExcl) {
+		if (iccIncExcl.equals("I")) {
+			return "Include All";
+		} else if (iccIncExcl.equals("X")) {
+			return "Exclude All";
+		} else if (iccIncExcl.equals("R")) {
+			return "By Rules (see below)";
+		} else if (iccIncExcl.equals("N")) {
+			return "Reference Only";
+		} else {
+			return "Apply Default Criteria";
+		}
+	}
+
+	public String lvIncexclDisplayFormula(String lvIncExclInd) {
+		String value = "";
+		if (lvIncExclInd.equals("I")) {
+			value = "to be INCLUDED";
+		} else if (lvIncExclInd.equals("X")) {
+			value = "to be EXCLUDED";
+		}
+		return value;
+	}
+
+	public String rnpFormula(String navdbId) {
+		String lNrnp = "";
+		Double lNrnpNav = null;
+
+		String query = "select rnp from navdb where navdb_id = ? ";
+		try {
+			List<DuRecord> rnpresult = app.executeQuery(query, navdbId);
+			for (DuRecord rnp : rnpresult) {
+				if (rnp.getObject("rnp") == null) {
+					return "None Selected";
+				} else {
+					lNrnpNav = ((BigDecimal) rnp.getObject("rnp")).doubleValue();
+				}
+			}
+
+			lNrnp = Objects.equals(lNrnpNav, null) ? "" : lNrnpNav.toString();
+		} catch (SQLException e) {
+			log.error("Error while executing genreport {}", e.getMessage());
+			lNrnp = "None Selected";
+		}
+		return lNrnp;
+	}
+
+	public String selectionRuleFormula(String includeExcludeInd) {
+		if (includeExcludeInd.equals("I")) {
+			return "Include All";
+		} else if (includeExcludeInd.equals("X")) {
+			return "Exclude All";
+		} else if (includeExcludeInd.equals("R")) {
+			return "By Rules (see below)";
+		} else {
+			return "Referenced records only";
+		}
+	}
+
+	public void printSameLine(PDPageContentStream contentStream, PDPage page, String text, float x, float fontSize,
+			PDFont font) throws IOException {
+		log.debug(contentStream.toString());
+		contentStream = newPage(1 * (fontSize + 2));
+		contentStream.setFont(font, fontSize);
+		contentStream.beginText();
+		contentStream.newLineAtOffset(x, currentHeight - fontSize + 2);
+		contentStream.showText(text);
+		contentStream.endText();
+	}
+
+	public String nullCheck(String value) {
+		return Objects.equals(value, null) ? "" : value;
+	}
+
+	public StringBuilder genReportCSV(IApplication appl, Integer pCycle, String pNavdbId, String fmsId)
+			throws SQLException, IOException {
+		try {
+			app = appl;
+			navdb = pNavdbId;
+
+			String aifRwyLimit = "select nvl(to_char(aif_rwy_length_limit),'None Selected') aif_rwy_length_limit from navdb where navdb_id = ?";
+			String airportData = """
+					   			select airport_ident, airport_icao,
+					          ata_iata_designator, airport_name, 'Std' type
+					from pl_std_airport a, navdb b
+					where processing_cycle = ?
+					and navdb_id = ?
+					and    a.data_supplier = b.data_supplier
+					union
+					select airport_ident, airport_icao,
+					          ata_iata_designator, airport_name, 'Tld' type
+					from   pl_tld_airport a, navdb b
+					where processing_cycle = ?
+					and customer_ident = ?
+					and navdb_id = ?
+					and    a.data_supplier = b.data_supplier
+					   			""";
+			String airportGroups = """
+					   			select a.select_by_id al_selbyid, a.navdb_id al_navdbid, a.group_name,
+					          b.airport_ident al_airport_ident, b.airport_icao al_airport_icao
+					from    select_by_airport_group a, airport_to_select b
+					where  a.navdb_id = ?
+					and     a.select_by_id = b.select_by_id
+					order by 3, 5, 4
+					   			""";
+
+			String areaCode = """
+					   			select  select_by_id ac_selbyid,
+					        area_code  ac_area_code,
+					        include_exclude_ind ac_incexcl
+					from    select_by_area
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String areaCodeChildren = """
+					   			select a.select_by_id acc_select_by_id, a.record_type_code acc_record_type_code,
+					       a.criteria_id acc_criteria_id, a.include_exclude_ind acc_incexcl,
+					       b.criteria_descr acc_criteria_desc, c.record_type_descr acc_record_type_descr, a.area_code_id acc_area_code_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+			String areaCodeGrandChildren = """
+					   			select a.select_by_id accc_sel_by_id, a.record_type_code accc_rec_type_code,
+					       a.criteria_id accc_crit_id, a.include_exclude_ind accc_inc_excl_ind,
+					       b.criteria_descr accc_crit_desc, c.record_type_descr accc_rec_type_descr,
+					       a.parent_select_by_id accc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String areaCodeValue = """
+					   			select select_by_id acccv_sel_by_id, value_descr acccv_value_descr,
+					          value acccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String arptGrp = """
+					   			select  select_by_id ag_selbyid,
+					        group_name  ag_group_name,
+					        include_exclude_ind ag_incexcl
+					from    select_by_airport_group
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String arptGrpChildren = """
+					   			select a.select_by_id agc_select_by_id, a.record_type_code agc_record_type_code,
+					       a.criteria_id agc_criteria_id, a.include_exclude_ind agc_incexcl,
+					       b.criteria_descr agc_criteria_desc, c.record_type_descr agc_record_type_descr, a.airport_group_id agc_airport_group_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String arptGrpGrandChildren = """
+					   			select a.select_by_id agcc_sel_by_id, a.record_type_code agcc_rec_type_code,
+					       a.criteria_id agcc_crit_id, a.include_exclude_ind agcc_inc_excl_ind,
+					       b.criteria_descr agcc_crit_desc, c.record_type_descr agcc_rec_type_descr,
+					       a.parent_select_by_id agcc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = :p_navdbid
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String arptGrpValue = """
+					   			select select_by_id agccv_sel_by_id, value_descr agccv_value_descr,
+					          value agccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String dccValue = """
+					   			select select_by_id dccv_sel_by_id, value_descr dccv_value_descr,
+					          value dccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String defaultCriteria = """
+					   			select a.select_by_id, a.record_type_code, a.criteria_id, a.include_exclude_ind,
+					          b.criteria_descr, c.record_type_descr
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    geo_area_id = -1
+					and    parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					order by 2
+
+					   			""";
+			String defaultCritChildren = """
+					   			select a.select_by_id dcc_sel_by_id, a.record_type_code dcc_rec_type_code,           a.criteria_id dcc_crit_id,
+					         a.include_exclude_ind dcc_inc_excl_ind,
+					          b.criteria_descr dcc_crit_desc, c.record_type_descr dcc_rec_type_descr, a.parent_select_by_id dcc_parent_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    geo_area_id = -1
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					and   a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String geoArea = """
+					   			select select_by_id g_selbyid,
+					           geo_area_name  g_geo_aria_name,
+					           include_exclude_ind g_incexcl
+					from    select_by_geographic_area
+					where  navdb_id = :p_navdbid
+					order by 1
+					   			""";
+
+			String geoChildren = """
+					   			select a.select_by_id gc_select_by_id, a.record_type_code gc_record_type_code, a.criteria_id gc_criteria_id, a.include_exclude_ind gc_incexcl,
+					          b.criteria_descr gc_criteria_desc, c.record_type_descr gc_record_type_descr, a.geo_area_id gc_geo_area_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String geoGrandChildren = """
+					   			select a.select_by_id gcc_sel_by_id, a.record_type_code gcc_rec_type_code,           a.criteria_id gcc_crit_id,
+					         a.include_exclude_ind gcc_inc_excl_ind,
+					          b.criteria_descr gcc_crit_desc, c.record_type_descr gcc_rec_type_descr, a.parent_select_by_id gcc_parent_id
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and   a.record_type_code = c.record_type_code
+					and   a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String geoGrandChildrenValue = """
+					   			select select_by_id gccv_sel_by_id, value_descr gccv_value_descr,
+					          value gccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String geoPoints = """
+					   			select select_by_id geop_selbyid,
+					           sequence_number geop_seqn,
+					           latitude g_latitude,
+					           longitude g_longitude
+					from    geographic_area_point
+					order by 2
+					   			""";
+
+			String icao = """
+					   			select  select_by_id ic_selbyid,
+					        icao_code  ic_icao_code,
+					        include_exclude_ind ic_incexcl
+					from    select_by_icao
+					where   navdb_id = ?
+					order by 2
+					   			""";
+
+			String icaoChildren = """
+					   			select a.select_by_id icc_select_by_id, a.record_type_code icc_record_type_code,
+					       a.criteria_id icc_criteria_id, a.include_exclude_ind icc_incexcl,
+					       b.criteria_descr icc_criteria_desc, c.record_type_descr icc_record_type_descr, a.icao_code_id icc_icao_code_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.parent_select_by_id is null
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					order by 2
+					   			""";
+
+			String icaoGrandChildren = """
+					   			select a.select_by_id iccc_sel_by_id, a.record_type_code iccc_rec_type_code,
+					       a.criteria_id iccc_crit_id, a.include_exclude_ind iccc_inc_excl_ind,
+					       b.criteria_descr iccc_crit_desc, c.record_type_descr iccc_rec_type_descr,
+					       a.parent_select_by_id iccc_parent_id
+					from   navdb_select_criteria a,
+					       select_criteria b,
+					       record_type    c
+					where  a.navdb_id = ?
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.include_exclude_ind in ('I','X')
+					order by 2
+					   			""";
+
+			String icaoValue = """
+					   			select select_by_id icccv_sel_by_id, value_descr icccv_value_descr,
+					          value icccv_value
+					from    selection_criteria_value
+					order by value_seq
+					   			""";
+
+			String listCriteriaValues = """
+					   			select a.select_by_id lv_selbyid, a.record_type_code lv_rectypecode, a.include_exclude_ind lv_incexcl,
+					       b.value_seq lv_seq, b.value lv_value,
+					       c.identifier_label lv_label, d.record_type_descr lv_record_descr
+					from   navdb_select_criteria a,
+					         selection_criteria_value b,
+					         record_identifier  c,
+					         record_type  d
+					where  a.navdb_id = ?
+					and     a.geo_area_id = -2
+					and     a.select_by_id = b.select_by_id
+					and    a.record_type_code = c.record_type_code
+					and    a.record_type_code = d.record_type_code
+					and    b.value_descr = c.identifier_column_name
+					order by 1, 2, 3
+					   			""";
+
+			String supplemental = """
+					   			select a.select_by_id sup_selbyid, a.record_type_code sup_rtc, a.criteria_id sup_criteria_id,
+					          decode(a.include_exclude_ind, 'I','Include',null) sup_incexci,
+					          b.criteria_descr sup_criteria_descr, c.record_type_descr sup_rec_descr
+					from   navdb_select_criteria a,
+					          select_criteria b,
+					          record_type    c
+					where a.navdb_id = ?
+					and    a.criteria_id in (select criteria_id from select_criteria where criteria_descr like '%SUPPL%')
+					and    a.criteria_id = b.criteria_id
+					and    a.record_type_code = c.record_type_code
+					and    a.geo_area_id = -1
+					order by 2
+					   			""";
+
+			List<DuRecord> aifRwyLimitResult = app.executeQuery(aifRwyLimit, pNavdbId);
+			List<DuRecord> airportDataResult = app.executeQuery(airportData, pCycle, pNavdbId, pCycle, pNavdbId,
+					pNavdbId);
+			List<DuRecord> airportGroupsResult = app.executeQuery(airportGroups, pNavdbId);
+			List<DuRecord> areaCodeResult = app.executeQuery(areaCode, pNavdbId);
+			List<DuRecord> areaCodeChildrenResult = app.executeQuery(areaCodeChildren, pNavdbId);
+			List<DuRecord> areaCodeGrandChildrenResult = app.executeQuery(areaCodeGrandChildren, pNavdbId);
+			List<DuRecord> areaCodeValueResult = app.executeQuery(areaCodeValue);
+			List<DuRecord> arptGrpResult = app.executeQuery(arptGrp, pNavdbId);
+			List<DuRecord> arptGrpChildrenResult = app.executeQuery(arptGrpChildren, pNavdbId);
+			List<DuRecord> arptGrpGrandChildrenResult = app.executeQuery(arptGrpGrandChildren, pNavdbId);
+			List<DuRecord> arptGrpValueResult = app.executeQuery(arptGrpValue);
+			List<DuRecord> dccValueResult = app.executeQuery(dccValue);
+			List<DuRecord> defaultCriteriaResult = app.executeQuery(defaultCriteria, pNavdbId);
+			List<DuRecord> defaultCritChildrenResult = app.executeQuery(defaultCritChildren, pNavdbId);
+			List<DuRecord> geoAreaResult = app.executeQuery(geoArea, pNavdbId);
+			List<DuRecord> geoChildrenResult = app.executeQuery(geoChildren, pNavdbId);
+			List<DuRecord> geoGrandChildrenResult = app.executeQuery(geoGrandChildren, pNavdbId);
+			List<DuRecord> geoGrandChildrenValueResult = app.executeQuery(geoGrandChildrenValue);
+			List<DuRecord> geoPointsResult = app.executeQuery(geoPoints);
+			List<DuRecord> icaoResult = app.executeQuery(icao, pNavdbId);
+			List<DuRecord> icaoChildrenResult = app.executeQuery(icaoChildren, pNavdbId);
+			List<DuRecord> icaoGrandChildrenResult = app.executeQuery(icaoGrandChildren, pNavdbId);
+			List<DuRecord> icaoValueResult = app.executeQuery(icaoValue);
+			List<DuRecord> listCriteriaValuesResult = app.executeQuery(listCriteriaValues, pNavdbId);
+			List<DuRecord> supplementalResult = app.executeQuery(supplemental, pNavdbId);
+
+			List<SelectionCriteriaDefaultCriteiriaMasterDTO> defaultCriteriaResultInr = new ArrayList<>();
+			List<SelectionCriteriaDefaultCriteiriaChildDTO> defaultCriteriaChildList = new ArrayList<>();
+			List<SelectionCriteriaDccValueDTO> defaultCriteriaDccList = new ArrayList<>();
+			List<SelectionCriteriaGeoArea> geoAreaList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaChildren> geoAreaChildList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaGrandChildrenDTO> geoAreaGrandChildList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaGccDTO> geoAreaDccList = new ArrayList<>();
+			List<SelectionCriteriaGeoAreaPointsDTO> geoAreaPointsList = new ArrayList<>();
+			List<ScSupplementalDTO> suppDtoList = new ArrayList<>();
+			List<ScAirportDataDTO> airportDtoList = new ArrayList<>();
+			List<ScAirportGroupDTO> airportGrpList = new ArrayList<>();
+			List<ScArptGrpDTO> arptGrpDTOList = new ArrayList<>();
+			List<ScArptGrpChildrenDTO> arptGrpChildrenDTOList = new ArrayList<>();
+			List<ScArptGrpGrandChildrenDTO> arptGrpGrandChildrenList = new ArrayList<>();
+			List<ScArptGrpValueDTO> arptGrpValueList = new ArrayList<>();
+			List<ScAreaCodeDTO> areaCodeList = new ArrayList<>();
+			List<ScAreaCodeChildrenDTO> areaCodeChildList = new ArrayList<>();
+			List<ScAreaCodeGrandChildrenDTO> areaCodeGrandChildList = new ArrayList<>();
+			List<ScAreaCodeValueDTO> areaCodeValueList = new ArrayList<>();
+			List<ScIcaoDTO> icaoList = new ArrayList<>();
+			List<ScIcaoChildrenDTO> icaoChildList = new ArrayList<>();
+			List<ScIcaoGrandChildrenDTO> icaoGrandChildList = new ArrayList<>();
+			List<ScIcaoValueDTO> icaoValueList = new ArrayList<>();
+			List<ScListCriteriaValuesDTO> listCriteriaValueList = new ArrayList<>();
+
+			for (DuRecord rec : defaultCriteriaResult) {
+				SelectionCriteriaDefaultCriteiriaMasterDTO cr = app.mapResultSetToClass(rec,
+						SelectionCriteriaDefaultCriteiriaMasterDTO.class);
+				if (cr != null) {
+					defaultCriteriaResultInr.add(cr);
+				}
+			}
+			for (DuRecord rec : defaultCritChildrenResult) {
+				SelectionCriteriaDefaultCriteiriaChildDTO cr = app.mapResultSetToClass(rec,
+						SelectionCriteriaDefaultCriteiriaChildDTO.class);
+				defaultCriteriaChildList.add(cr);
+			}
+
+			for (DuRecord rec : dccValueResult) {
+				SelectionCriteriaDccValueDTO cr = app.mapResultSetToClass(rec, SelectionCriteriaDccValueDTO.class);
+				defaultCriteriaDccList.add(cr);
+			}
+
+			for (DuRecord rec : geoAreaResult) {
+				SelectionCriteriaGeoArea geoAreadto = app.mapResultSetToClass(rec, SelectionCriteriaGeoArea.class);
+				geoAreaList.add(geoAreadto);
+			}
+
+			for (DuRecord rec : geoChildrenResult) {
+				SelectionCriteriaGeoAreaChildren child = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaChildren.class);
+				geoAreaChildList.add(child);
+			}
+
+			for (DuRecord rec : geoGrandChildrenResult) {
+				SelectionCriteriaGeoAreaGrandChildrenDTO grandChild = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaGrandChildrenDTO.class);
+				if (grandChild.getGccParentId() != null) {
+					geoAreaGrandChildList.add(grandChild);
+				}
+			}
+
+			for (DuRecord rec : geoGrandChildrenValueResult) {
+				SelectionCriteriaGeoAreaGccDTO dccList = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaGccDTO.class);
+				geoAreaDccList.add(dccList);
+			}
+
+			for (DuRecord rec : geoPointsResult) {
+				SelectionCriteriaGeoAreaPointsDTO geoPointsdto = app.mapResultSetToClass(rec,
+						SelectionCriteriaGeoAreaPointsDTO.class);
+				geoAreaPointsList.add(geoPointsdto);
+			}
+
+			for (DuRecord rec : supplementalResult) {
+				ScSupplementalDTO supp = app.mapResultSetToClass(rec, ScSupplementalDTO.class);
+				suppDtoList.add(supp);
+			}
+
+			for (DuRecord rec : airportDataResult) {
+				ScAirportDataDTO airport = app.mapResultSetToClass(rec, ScAirportDataDTO.class);
+				airportDtoList.add(airport);
+			}
+
+			for (DuRecord rec : airportGroupsResult) {
+				ScAirportGroupDTO grp = app.mapResultSetToClass(rec, ScAirportGroupDTO.class);
+				airportGrpList.add(grp);
+			}
+
+			for (DuRecord rec : arptGrpResult) {
+				ScArptGrpDTO grpDto = app.mapResultSetToClass(rec, ScArptGrpDTO.class);
+				arptGrpDTOList.add(grpDto);
+			}
+
+			for (DuRecord rec : arptGrpChildrenResult) {
+				ScArptGrpChildrenDTO child = app.mapResultSetToClass(rec, ScArptGrpChildrenDTO.class);
+				arptGrpChildrenDTOList.add(child);
+			}
+
+			for (DuRecord rec : arptGrpGrandChildrenResult) {
+				ScArptGrpGrandChildrenDTO child = app.mapResultSetToClass(rec, ScArptGrpGrandChildrenDTO.class);
+				if (child.getAgccParentId() != null) {
+					arptGrpGrandChildrenList.add(child);
+				}
+			}
+
+			for (DuRecord rec : arptGrpValueResult) {
+				ScArptGrpValueDTO data = app.mapResultSetToClass(rec, ScArptGrpValueDTO.class);
+				arptGrpValueList.add(data);
+			}
+
+			for (DuRecord rec : areaCodeResult) {
+				ScAreaCodeDTO area = app.mapResultSetToClass(rec, ScAreaCodeDTO.class);
+				areaCodeList.add(area);
+			}
+
+			for (DuRecord rec : areaCodeChildrenResult) {
+				ScAreaCodeChildrenDTO child = app.mapResultSetToClass(rec, ScAreaCodeChildrenDTO.class);
+				areaCodeChildList.add(child);
+			}
+
+			for (DuRecord rec : areaCodeGrandChildrenResult) {
+				ScAreaCodeGrandChildrenDTO child = app.mapResultSetToClass(rec, ScAreaCodeGrandChildrenDTO.class);
+				if (child.getAcccParentId() != null) {
+					areaCodeGrandChildList.add(child);
+				}
+			}
+
+			for (DuRecord rec : areaCodeValueResult) {
+				ScAreaCodeValueDTO codeValue = app.mapResultSetToClass(rec, ScAreaCodeValueDTO.class);
+				areaCodeValueList.add(codeValue);
+			}
+
+			for (DuRecord rec : icaoResult) {
+				ScIcaoDTO icaodto = app.mapResultSetToClass(rec, ScIcaoDTO.class);
+				icaoList.add(icaodto);
+			}
+
+			for (DuRecord rec : icaoChildrenResult) {
+				ScIcaoChildrenDTO child = app.mapResultSetToClass(rec, ScIcaoChildrenDTO.class);
+				icaoChildList.add(child);
+			}
+
+			for (DuRecord rec : icaoGrandChildrenResult) {
+				ScIcaoGrandChildrenDTO grandChild = app.mapResultSetToClass(rec, ScIcaoGrandChildrenDTO.class);
+				if (grandChild.getIcccParentId() != null) {
+					icaoGrandChildList.add(grandChild);
+				}
+			}
+
+			for (DuRecord rec : icaoValueResult) {
+				ScIcaoValueDTO icaoVal = app.mapResultSetToClass(rec, ScIcaoValueDTO.class);
+				icaoValueList.add(icaoVal);
+			}
+
+			for (DuRecord rec : listCriteriaValuesResult) {
+				ScListCriteriaValuesDTO value = app.mapResultSetToClass(rec, ScListCriteriaValuesDTO.class);
+				listCriteriaValueList.add(value);
+			}
+
+			for (ScAirportGroupDTO grp : airportGrpList) {
+				ScAirportDataDTO data = airportDtoList.stream()
+						.filter(p -> p.getAirportIdent().equalsIgnoreCase(grp.getAlAirportIdent())).findFirst()
+						.orElse(null);
+				if (data != null) {
+					grp.setAtaIata(data.getAtaIataDesignator());
+					grp.setName(data.getAirportName());
+					grp.setStdTld(data.getType());
+				}
+			}
+
+			for (SelectionCriteriaDefaultCriteiriaMasterDTO defCrit : defaultCriteriaResultInr) {
+				List<SelectionCriteriaDefaultCriteiriaChildDTO> childList = defaultCriteriaChildList.parallelStream()
+						.sequential()
+						.filter(child -> child.getDccRecTypeDescr().equalsIgnoreCase(defCrit.getRecordTypeDescr()))
+						.collect(Collectors.toList());
+				List<SelectionCriteriaDefaultCriteiriaChildDTO> dccList = new ArrayList<>();
+				for (SelectionCriteriaDefaultCriteiriaChildDTO child : childList) {
+
+					List<SelectionCriteriaDccValueDTO> dccData = defaultCriteriaDccList.parallelStream().sequential()
+							.filter(dcc -> dcc.getDccvSelById().equals(child.getDccSelById()))
+							.collect(Collectors.toList());
+					if (dccData.size() == 1) {
+						SelectionCriteriaDefaultCriteiriaChildDTO dccDto = new SelectionCriteriaDefaultCriteiriaChildDTO();
+						dccDto.setDccCritDesc(child.getDccCritDesc());
+						dccDto.setDccCritId(child.getDccCritId());
+						dccDto.setDccIncExclInd(child.getDccIncExclInd());
+						dccDto.setDccParentId(child.getDccParentId());
+						dccDto.setDccRecTypeCode(child.getDccRecTypeCode());
+						dccDto.setDccRecTypeDescr(child.getDccRecTypeDescr());
+						dccDto.setDccSelById(child.getDccSelById());
+						dccDto.setDccValue(dccData.get(0).getDccvValue());
+						dccList.add(dccDto);
+					} else if (dccData.size() > 1) {
+						int i = 1;
+						for (SelectionCriteriaDccValueDTO dcc : dccData) {
+							SelectionCriteriaDefaultCriteiriaChildDTO dccDto = new SelectionCriteriaDefaultCriteiriaChildDTO();
+							dccDto.setDccCritDesc(child.getDccCritDesc());
+							dccDto.setDccCritId(child.getDccCritId());
+							dccDto.setDccIncExclInd(i > 1 ? "" : child.getDccIncExclInd());
+							dccDto.setDccParentId(child.getDccParentId());
+							dccDto.setDccRecTypeCode(child.getDccRecTypeCode());
+							dccDto.setDccRecTypeDescr(child.getDccRecTypeDescr());
+							dccDto.setDccSelById(child.getDccSelById());
+							dccDto.setDccValue(dcc.getDccvValue());
+							dccList.add(dccDto);
+							i++;
+						}
+					} else if (dccData.size() == 0) {
+						dccList.add(child);
+					}
+				}
+				defCrit.setDefaultCriteiriaChild(dccList);
+			}
+			for (SelectionCriteriaGeoArea geo : geoAreaList) {
+				List<SelectionCriteriaGeoAreaChildren> childData = geoAreaChildList.parallelStream().sequential()
+						.filter(child -> child.getGcGeoAreaId() != null
+								&& (child.getGcGeoAreaId().equals(geo.getGSelbyid())))
+						.collect(Collectors.toList());
+				for (SelectionCriteriaGeoAreaChildren child : childData) {
+					List<SelectionCriteriaGeoAreaGrandChildrenDTO> grandChild = geoAreaGrandChildList.parallelStream()
+							.sequential().filter(grand -> grand.getGccParentId().equals(child.getGcSelectById()))
+							.collect(Collectors.toList());
+					List<SelectionCriteriaGeoAreaGrandChildrenDTO> grandData = new ArrayList<>();
+					for (SelectionCriteriaGeoAreaGrandChildrenDTO grand : grandChild) {
+						List<SelectionCriteriaGeoAreaGccDTO> gccDto = geoAreaDccList.parallelStream().sequential()
+								.filter(gcc -> gcc.getGccvSelById().equals(grand.getGccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (SelectionCriteriaGeoAreaGccDTO gcc : gccDto) {
+								SelectionCriteriaGeoAreaGrandChildrenDTO gc = new SelectionCriteriaGeoAreaGrandChildrenDTO();
+								gc.setGccvValue(gcc.getGccvValue());
+								gc.setGccCritDesc(grand.getGccCritDesc());
+								gc.setGccIncExclInd(grand.getGccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setGeoAreaGrandChildList(grandData);
+				}
+				List<SelectionCriteriaGeoAreaPointsDTO> pointsdto = geoAreaPointsList.parallelStream().sequential()
+						.filter(point -> point.getGeopSelbyid().equals(geo.getGSelbyid())).collect(Collectors.toList());
+				geo.setGeoAreaChildList(childData);
+				geo.setGeoAreaPointsList(pointsdto);
+			}
+
+			for (ScAreaCodeDTO area : areaCodeList) {
+				List<ScAreaCodeChildrenDTO> childData = areaCodeChildList.parallelStream().sequential()
+						.filter(child -> child.getAccAreaCodeId() != null
+								&& (child.getAccAreaCodeId().equals(area.getAcSelbyid())))
+						.collect(Collectors.toList());
+				for (ScAreaCodeChildrenDTO child : childData) {
+					List<ScAreaCodeGrandChildrenDTO> grandChild = areaCodeGrandChildList.parallelStream().sequential()
+							.filter(grand -> grand.getAcccParentId().equals(child.getAccSelectById()))
+							.collect(Collectors.toList());
+					List<ScAreaCodeGrandChildrenDTO> grandData = new ArrayList<ScAreaCodeGrandChildrenDTO>();
+					for (ScAreaCodeGrandChildrenDTO grand : grandChild) {
+						List<ScAreaCodeValueDTO> gccDto = areaCodeValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getAcccvSelById().equals(grand.getAcccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScAreaCodeValueDTO value : gccDto) {
+								ScAreaCodeGrandChildrenDTO gc = new ScAreaCodeGrandChildrenDTO();
+								gc.setAcccCritDesc(grand.getAcccCritDesc());
+								gc.setAcccValue(value.getAcccvValue());
+								gc.setAcccIncExclInd(grand.getAcccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setAreaCodeGrandChildrenList(grandData);
+				}
+				area.setAreaChildrenList(childData);
+			}
+
+			for (ScIcaoDTO ica : icaoList) {
+				List<ScIcaoChildrenDTO> childData = icaoChildList.parallelStream().sequential()
+						.filter(child -> child.getIccIcaoCodeId() != null
+								&& (child.getIccIcaoCodeId().equals(ica.getIcSelbyid())))
+						.collect(Collectors.toList());
+				for (ScIcaoChildrenDTO child : childData) {
+					List<ScIcaoGrandChildrenDTO> grandChild = icaoGrandChildList.parallelStream().sequential()
+							.filter(grand -> grand.getIcccParentId().equals(child.getIccSelectById()))
+							.collect(Collectors.toList());
+					List<ScIcaoGrandChildrenDTO> grandData = new ArrayList<>();
+					for (ScIcaoGrandChildrenDTO grand : grandChild) {
+						List<ScIcaoValueDTO> gccDto = icaoValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getIcccvSelById().equals(grand.getIcccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScIcaoValueDTO gcc : gccDto) {
+								ScIcaoGrandChildrenDTO gc = new ScIcaoGrandChildrenDTO();
+								gc.setIccValue(gcc.getIcccvValue());
+								gc.setIcccCritDesc(grand.getIcccCritDesc());
+								gc.setIcccIncExclInd(grand.getIcccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setIcaoGrandChildrenList(grandData);
+				}
+				ica.setIcaoChildrenList(childData);
+			}
+
+			for (ScArptGrpDTO arpt : arptGrpDTOList) {
+				List<ScArptGrpChildrenDTO> childData = arptGrpChildrenDTOList.parallelStream().sequential()
+						.filter(child -> child.getAgcAirportGroupId() != null
+								&& (child.getAgcAirportGroupId().equals(arpt.getAgSelbyid())))
+						.collect(Collectors.toList());
+				for (ScArptGrpChildrenDTO child : childData) {
+					List<ScArptGrpGrandChildrenDTO> grandChild = arptGrpGrandChildrenList.parallelStream().sequential()
+							.filter(grand -> grand.getAgccParentId().equals(child.getAgcSelectById()))
+							.collect(Collectors.toList());
+					List<ScArptGrpGrandChildrenDTO> grandData = new ArrayList<>();
+					for (ScArptGrpGrandChildrenDTO grand : grandChild) {
+						List<ScArptGrpValueDTO> gccDto = arptGrpValueList.parallelStream().sequential()
+								.filter(gcc -> gcc.getAgccvSelById().equals(grand.getAgccSelById()))
+								.collect(Collectors.toList());
+						if (gccDto.size() != 0) {
+							for (ScArptGrpValueDTO gcc : gccDto) {
+								ScArptGrpGrandChildrenDTO gc = new ScArptGrpGrandChildrenDTO();
+								gc.setAgccvValue(gcc.getAgccvValue());
+								gc.setAgccCritDesc(grand.getAgccCritDesc());
+								gc.setAgccIncExclInd(grand.getAgccIncExclInd());
+								grandData.add(gc);
+							}
+						} else {
+							grandData.add(grand);
+						}
+					}
+					child.setArptGrpGrandChildList(grandData);
+				}
+				arpt.setArptGrpChildList(childData);
+			}
+
+			String aipRunwayLength = "";
+
+			String selectionGeoGraphic = "";
+			String selectionByAreaCode = "";
+			String selectionByIcaoCode = "";
+			String selectionByAirportGrp = "";
+
+			for (DuRecord rec : aifRwyLimitResult) {
+				aipRunwayLength = rec.getString();
+			}
+			beforeReport(pNavdbId);
+			if (!cpNoneMessage.equals("None Selected") && !cpNoneMessage.equals("")) {
+				selectionByAreaCode = cpNoneMessage.split("\n")[0].toString();
+				selectionByIcaoCode = cpNoneMessage.split("\n")[0].toString();
+				selectionGeoGraphic = cpNoneMessage.split("\n")[0].toString();
+				selectionByAirportGrp = cpNoneMessage.split("\n")[0].toString();
+			} else if (cpNoneMessage.equals("None Selected")) {
+				selectionByAreaCode = "None Selected";
+				selectionByIcaoCode = "None Selected";
+				selectionGeoGraphic = "None Selected";
+				selectionByAirportGrp = "None Selected";
+			}
+
+			builder.append("Exported on:").append(COMMA).append(currentDateCSV()).append(NEWLINE);
+			builder.append("NAVDB:").append(COMMA).append(navdb).append(COMMA).append("FMS ID:").append(COMMA)
+					.append(fmsId).append(NEWLINE);
+			builder.append(NEWLINE);
+
+			// General Criteria
+			String[] message = cpNoneMessage.split(NEWLINE);
+			List<String> cpMessage = Arrays.asList(message);
+			for (int i = 0; i < cpMessage.size(); i++) {
+				String cpMesg = cpMessage.get(i);
+				builder.append(i == 0 ? "General Criteria" : "").append(COMMA).append(cpMesg).append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+			// default criteria
+			builder.append("Default Criteria").append(NEWLINE);
+			if (defaultCriteriaResultInr.size() > 0) {
+				builder.append("Record Type").append(COMMA).append("Selection Rule").append(NEWLINE);
+
+				for (SelectionCriteriaDefaultCriteiriaMasterDTO defaultData : defaultCriteriaResultInr) {
+					if (defaultData.getDefaultCriteiriaChild().size() != 0
+							&& !defaultData.getIncludeExcludeInd().equalsIgnoreCase("X")) {
+						builder.append(defaultData.getRecordTypeDescr()).append(COMMA)
+								.append(accIncexclFormula(defaultData.getIncludeExcludeInd())).append(NEWLINE);
+						if (Arrays.asList("R").contains(defaultData.getIncludeExcludeInd())) {
+							for (int i = 0; i < defaultData.getDefaultCriteiriaChild().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								String recordType = defaultData.getDefaultCriteiriaChild().get(i).getDccCritDesc() + " "
+										+ (Objects.equals(defaultData.getDefaultCriteiriaChild().get(i).getDccValue(),
+												null) ? ""
+														: defaultData.getDefaultCriteiriaChild().get(i).getDccValue());
+								if (defaultData.getDefaultCriteiriaChild().size() == 1) {
+
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+											.append(dccIncexclDisplayFormula(
+													defaultData.getDefaultCriteiriaChild().get(i).getDccIncExclInd()))
+											.append(NEWLINE);
+									break;
+								}
+								if (i == defaultData.getDefaultCriteiriaChild().size()) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+											.append(dccIncexclDisplayFormula(
+													defaultData.getDefaultCriteiriaChild().get(i).getDccIncExclInd()))
+											.append(NEWLINE);
+								}
+								builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+										.append(dccIncexclDisplayFormula(
+												defaultData.getDefaultCriteiriaChild().get(i).getDccIncExclInd()))
+										.append(NEWLINE);
+							}
+						}
+					} else {
+						builder.append(defaultData.getRecordTypeDescr()).append(COMMA)
+								.append(selectionRuleFormula(defaultData.getIncludeExcludeInd())).append(NEWLINE);
+					}
+				}
+			}
+			builder.append(NEWLINE);
+			builder.append("AIF Runway Length Limit").append(COMMA).append(aipRunwayLength).append(NEWLINE);
+			builder.append(NEWLINE);
+			builder.append("RNP  (nms)").append(COMMA).append(rnpFormula(pNavdbId)).append(NEWLINE);
+			builder.append(NEWLINE);
+
+			// geo area
+			if(geoAreaList.size()!= 0) {				
+				builder.append("Selection By Geographic Area").append(NEWLINE);
+				for (SelectionCriteriaGeoArea geo : geoAreaList) {
+					builder.append("Geographic Area Name").append(COMMA).append(geo.getGGeoAriaName()).append(COMMA)
+					.append(nullCheck(geo.getGIncexcl())).append(NEWLINE);
+					builder.append(COMMA).append("Seq #").append(COMMA).append("Latitude").append(COMMA).append("Longitude")
+					.append(NEWLINE);
+					for (SelectionCriteriaGeoAreaPointsDTO points : geo.getGeoAreaPointsList()) {
+						builder.append(COMMA).append(points.getGeopSeqn().toString()).append(COMMA)
+						.append(points.getGLatitude()).append(COMMA).append(points.getGLongitude()).append(NEWLINE);
+					}
+					builder.append(COMMA).append("Record Type").append(COMMA).append("Selection Rule").append(NEWLINE);
+					for (SelectionCriteriaGeoAreaChildren child : geo.getGeoAreaChildList()) {
+						if (child.getGeoAreaGrandChildList().size() != 0) {
+							builder.append(COMMA).append(child.getGcRecordTypeDescr()).append(COMMA)
+							.append(gcIncexclFormula(child.getGcIncexcl())).append(NEWLINE);
+							for (int i = 0; i < child.getGeoAreaGrandChildList().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								String recordType = child.getGeoAreaGrandChildList().get(i).getGccCritDesc() + " "
+										+ (Objects.equals(child.getGeoAreaGrandChildList().get(i).getGccvValue(), null) ? ""
+												: child.getGeoAreaGrandChildList().get(i).getGccvValue());
+								if (child.getGeoAreaGrandChildList().size() == 1) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(dccIncexclDisplayFormula(
+											child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()))
+									.append(NEWLINE);
+									break;
+								}
+								if (i == child.getGeoAreaGrandChildList().size()) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(dccIncexclDisplayFormula(
+											child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()))
+									.append(NEWLINE);
+								}
+								builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+								.append(dccIncexclDisplayFormula(
+										child.getGeoAreaGrandChildList().get(i).getGccIncExclInd()))
+								.append(NEWLINE);
+							}
+						} else {
+							builder.append(COMMA).append(child.getGcRecordTypeDescr()).append(COMMA)
+							.append(gcIncexclFormula(child.getGcIncexcl())).append(NEWLINE);
+						}
+					}
+				}
+			} else {
+				builder.append("Selection By Geographic Area").append(COMMA).append("None Selected").append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+
+			// Selection by Area Code
+			if(areaCodeList.size() != 0) {				
+				builder.append("Selection By Area Code").append(NEWLINE);
+				for (ScAreaCodeDTO area : areaCodeList) {
+					builder.append("Area Code").append(COMMA).append(area.getAcAreaCode()).append(NEWLINE);
+					builder.append(COMMA).append("Record Type").append(COMMA).append("Selection Rule").append(NEWLINE);
+					for (ScAreaCodeChildrenDTO child : area.getAreaChildrenList()) {
+						if (child.getAreaCodeGrandChildrenList().size() != 0) {
+							builder.append(COMMA).append(child.getAccRecordTypeDescr()).append(COMMA)
+							.append(accIncexclFormula(child.getAccIncexcl())).append(NEWLINE);
+							for (int i = 0; i < child.getAreaCodeGrandChildrenList().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								String recordType = child.getAreaCodeGrandChildrenList().get(i).getAcccCritDesc() + " "
+										+ (Objects.equals(child.getAreaCodeGrandChildrenList().get(i).getAcccValue(), null)
+												? ""
+														: child.getAreaCodeGrandChildrenList().get(i).getAcccValue());
+								if (child.getAreaCodeGrandChildrenList().size() == 1) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getAreaCodeGrandChildrenList().get(i).getAcccIncExclInd()))
+									.append(NEWLINE);
+									break;
+								}
+								if (i == child.getAreaCodeGrandChildrenList().size()) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getAreaCodeGrandChildrenList().get(i).getAcccIncExclInd()))
+									.append(NEWLINE);
+								}
+								builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+								.append(acccIncexclDisplayFormula(
+										child.getAreaCodeGrandChildrenList().get(i).getAcccIncExclInd()))
+								.append(NEWLINE);
+							}
+							
+						} else {
+							builder.append(COMMA).append(child.getAccRecordTypeDescr()).append(COMMA)
+							.append(accIncexclFormula(child.getAccIncexcl())).append(NEWLINE);
+						}
+					}
+				}
+			} else {
+				builder.append("Selection By Area Code").append(COMMA).append("None Selected").append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+
+			// Selection by ICAO Code
+			if(icaoList.size() != 0) {				
+				builder.append("Selection By Icao Code").append(NEWLINE);
+				for (ScIcaoDTO icaoDto : icaoList) {
+					builder.append("ICAO Code").append(COMMA).append(icaoDto.getIcIcaoCode()).append(NEWLINE);
+					builder.append(COMMA).append("Record Type").append(COMMA).append("Selection Rule").append(NEWLINE);
+					for (ScIcaoChildrenDTO child : icaoDto.getIcaoChildrenList()) {
+						if (child.getIcaoGrandChildrenList().size() != 0) {
+							builder.append(COMMA).append(child.getIccRecordTypeDescr()).append(COMMA)
+							.append(accIncexclFormula(child.getIccIncexcl())).append(NEWLINE);
+							for (int i = 0; i < child.getIcaoGrandChildrenList().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								String recordType = child.getIcaoGrandChildrenList().get(i).getIcccCritDesc() + " "
+										+ (Objects.equals(child.getIcaoGrandChildrenList().get(i).getIccValue(), null) ? ""
+												: child.getIcaoGrandChildrenList().get(i).getIccValue());
+								if (child.getIcaoGrandChildrenList().size() == 1) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()))
+									.append(NEWLINE);
+									break;
+								}
+								if (i == child.getIcaoGrandChildrenList().size()) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()))
+									.append(NEWLINE);
+								}
+								builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+								.append(acccIncexclDisplayFormula(
+										child.getIcaoGrandChildrenList().get(i).getIcccIncExclInd()))
+								.append(NEWLINE);
+							}
+							
+						} else {
+							builder.append(COMMA).append(child.getIccRecordTypeDescr()).append(COMMA)
+							.append(accIncexclFormula(child.getIccIncexcl())).append(NEWLINE);
+						}
+					}
+				}
+			} else {
+				builder.append("Selection By ICAO Code").append(COMMA).append("None Selected").append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+
+			// Selection by Airport Group
+			if(arptGrpDTOList.size() != 0) {				
+				builder.append("Selection By Airport Group").append(NEWLINE);
+				for (ScArptGrpDTO arpt : arptGrpDTOList) {
+					builder.append("Airport Group").append(COMMA).append(arpt.getAgGroupName()).append(COMMA)
+					.append(arpt.getAgIncexcl()).append(NEWLINE);
+					builder.append(COMMA).append("Record Type").append(COMMA).append("Selection Rule").append(NEWLINE);
+					for (ScArptGrpChildrenDTO child : arpt.getArptGrpChildList()) {
+						if (child.getArptGrpGrandChildList().size() != 0) {
+							builder.append(COMMA).append(child.getAgcRecordTypeDescr()).append(COMMA)
+							.append(gcIncexclFormula(child.getAgcIncexcl())).append(NEWLINE);
+							for (int i = 0; i < child.getArptGrpGrandChildList().size(); i++) {
+								String prefix = i == 0 ? "Rules:  " : "";
+								String recordType = child.getArptGrpGrandChildList().get(i).getAgccCritDesc() + " "
+										+ (Objects.equals(child.getArptGrpGrandChildList().get(i).getAgccvValue(), null)
+												? ""
+														: child.getArptGrpGrandChildList().get(i).getAgccvValue());
+								if (child.getArptGrpGrandChildList().size() == 1) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()))
+									.append(NEWLINE);
+									break;
+								}
+								if (i == child.getArptGrpGrandChildList().size()) {
+									builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+									.append(acccIncexclDisplayFormula(
+											child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()))
+									.append(NEWLINE);
+								}
+								builder.append(COMMA).append(prefix).append(COMMA).append(recordType).append(COMMA)
+								.append(acccIncexclDisplayFormula(
+										child.getArptGrpGrandChildList().get(i).getAgccIncExclInd()))
+								.append(NEWLINE);
+							}
+							
+						} else {
+							builder.append(COMMA).append(child.getAgcRecordTypeDescr()).append(COMMA)
+							.append(gcIncexclFormula(child.getAgcIncexcl())).append(NEWLINE);
+						}
+					}
+				}
+			} else {
+				builder.append("Selection By Airport Group").append(COMMA).append("None Selected").append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+
+			// Airport Group - Airport List
+			if (airportGrpList.size() > 0) {
+				builder.append("Airport Group - Airport List").append(NEWLINE);
+				Map<String, List<ScAirportGroupDTO>> airportGroupList = airportGrpList.stream().collect(
+						Collectors.groupingBy(ScAirportGroupDTO::getGroupName, TreeMap::new, Collectors.toList()));
+				for (Map.Entry<String, List<ScAirportGroupDTO>> entry : airportGroupList.entrySet()) {
+					String groupName = entry.getKey();
+					List<ScAirportGroupDTO> groupList = entry.getValue();
+					builder.append("Group Name").append(COMMA).append(groupName).append(NEWLINE);
+					builder.append("Airports").append(COMMA).append("Ident").append(COMMA).append("Icao").append(COMMA)
+							.append("ATA/IATA").append(COMMA).append("Name").append(COMMA).append("Std/Tld")
+							.append(NEWLINE);
+					for (ScAirportGroupDTO airport : groupList) {
+						builder.append(COMMA).append(airport.getAlAirportIdent()).append(COMMA)
+								.append(airport.getAlAirportIcao()).append(COMMA)
+								.append(nullCheck(airport.getAtaIata())).append(COMMA)
+								.append(nullCheck(airport.getName())).append(COMMA)
+								.append(nullCheck(airport.getStdTld())).append(NEWLINE);
+					}
+				}
+			} else {
+				builder.append("Airport Group - Airport List").append(COMMA).append("None Selected").append(NEWLINE);
+			}
+			builder.append(NEWLINE);
+
+			// Selection by Lists
+			if (listCriteriaValueList.size() > 0) {
+				Map<String, List<ScListCriteriaValuesDTO>> selectRecordList = listCriteriaValueList.stream()
+						.collect(Collectors.groupingBy(ScListCriteriaValuesDTO::getLvRecordDescr, TreeMap::new,
+								Collectors.toList()));
+				for (Map.Entry<String, List<ScListCriteriaValuesDTO>> selectList : selectRecordList.entrySet()) {
+					String selectName = selectList.getKey();
+					List<ScListCriteriaValuesDTO> selectData = selectList.getValue();
+					List<ScListCriteriaValuesDTO> excludedList = selectData.stream()
+							.filter(p -> p.getLvIncexcl().equalsIgnoreCase("X")).collect(Collectors.toList());
+					excludedList = excludedList.stream()
+							.sorted(Comparator.comparingInt(ScListCriteriaValuesDTO::getLvSeq))
+							.collect(Collectors.toList());
+					List<ScListCriteriaValuesDTO> includedList = selectData.stream()
+							.filter(p -> p.getLvIncexcl().equalsIgnoreCase("I")).collect(Collectors.toList());
+					includedList = includedList.stream()
+							.sorted(Comparator.comparingInt(ScListCriteriaValuesDTO::getLvSeq))
+							.collect(Collectors.toList());
+					List<String> labels = selectData.stream().map(ScListCriteriaValuesDTO::getLvLabel).distinct()
+							.collect(Collectors.toList());
+					labels = labels.stream().sorted().collect(Collectors.toList());
+					labelsList = labels;
+					if (excludedList.size() > 0) {
+						builder.append("Select Records by List").append(NEWLINE);
+						builder.append(COMMA).append(selectName + " " + lvIncexclDisplayFormula("X")).append(NEWLINE);
+						builder.append(COMMA).append(COMMA);
+						for (String label : labels) {
+							builder.append(label).append(COMMA);
+						}
+						builder.append(NEWLINE);
+						Map<String, List<ScListCriteriaValuesDTO>> list = new HashMap<>();
+						for (String label : labels) {
+							list.put(label, excludedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+									.collect(Collectors.toList()));
+						}
+						String[][] finalList = new String[list.get(labels.get(0)).size()][labels.size()];
+						for (int i = 0; i < labels.size(); i++) {
+							List<ScListCriteriaValuesDTO> data = list.get(labels.get(i));
+							for (int j = 0; j < data.size(); j++) {
+								finalList[j][i] = data.get(j).getLvValue();
+							}
+
+						}
+						int seq = 1;
+						for (String[] string : finalList) {
+							String[] original = string;
+							String[] updated = new String[original.length + 1];
+							updated[0] = String.valueOf(seq);
+							System.arraycopy(original, 0, updated, 1, original.length);
+							builder.append(COMMA);
+							for (String value : updated) {
+								builder.append(value).append(COMMA);
+							}
+							builder.append(NEWLINE);
+							seq++;
+						}
+					}
+					if (includedList.size() > 0) {
+						builder.append("Select Records by List").append(NEWLINE);
+						builder.append(COMMA).append(selectName + " " + lvIncexclDisplayFormula("I")).append(NEWLINE);
+						builder.append(COMMA).append(COMMA);
+						for (String label : labels) {
+							builder.append(label).append(COMMA);
+						}
+						builder.append(NEWLINE);
+						Map<String, List<ScListCriteriaValuesDTO>> list = new HashMap<>();
+						for (String label : labels) {
+							list.put(label, includedList.stream().filter(p -> p.getLvLabel().equalsIgnoreCase(label))
+									.collect(Collectors.toList()));
+						}
+						String[][] finalList = new String[list.get(labels.get(0)).size()][labels.size()];
+						for (int i = 0; i < labels.size(); i++) {
+							List<ScListCriteriaValuesDTO> data = list.get(labels.get(i));
+							for (int j = 0; j < data.size(); j++) {
+								finalList[j][i] = data.get(j).getLvValue();
+							}
+
+						}
+						int seq = 1;
+						for (String[] string : finalList) {
+							String[] original = string;
+							String[] updated = new String[original.length + 1];
+							updated[0] = String.valueOf(seq);
+							System.arraycopy(original, 0, updated, 1, original.length);
+							builder.append(COMMA);
+							for (String value : updated) {
+								builder.append(value).append(COMMA);
+							}
+							builder.append(NEWLINE);
+							seq++;
+						}
+					}
+				}
+			}
+			return builder; // Return as byte array
+
+		} catch (Exception e) {
+			log.error("Error generating PDF {}" , e.getMessage());
+			throw e;
+		}
+
+	}
+
+	private String currentDateCSV() {
+		LocalDateTime now = LocalDateTime.now();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MMM-yy");
+		String formattedDateTime = now.format(formatter).toUpperCase();
+		return formattedDateTime;
+	}
+
+}
